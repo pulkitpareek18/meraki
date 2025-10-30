@@ -9,6 +9,12 @@ import {
     importFromUltravox,
     cleanupInvalidCalls
 } from '../controllers/apiController.js';
+import { 
+    checkServicesHealth, 
+    getServiceMetrics, 
+    performMaintenance,
+    getServiceHealthSummary
+} from '../services/serviceManager.js';
 import { getConversations, getConversationById } from '../services/conversation.js';
 import { generateDashboardHTML } from '../views/dashboard.js';
 import { generateConversationDetailHTML } from '../views/conversationDetail.js';
@@ -27,9 +33,56 @@ router.post('/api/conversations/refresh-all', batchRefreshAllConversations);
 router.post('/api/conversations/import-from-ultravox', importFromUltravox);
 router.post('/api/conversations/cleanup-invalid', cleanupInvalidCalls);
 
-// Health check endpoint
+// Enhanced health check endpoints
 router.get('/health', (req, res) => {
-    res.json({ ok: true, timestamp: new Date().toISOString() });
+    res.json({ 
+        ok: true, 
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        version: process.version
+    });
+});
+
+router.get('/health/detailed', async (req, res) => {
+    try {
+        const health = await checkServicesHealth();
+        res.json(health);
+    } catch (error) {
+        res.status(500).json({
+            ok: false,
+            error: 'Health check failed',
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+router.get('/metrics', async (req, res) => {
+    try {
+        const metrics = await getServiceMetrics();
+        res.json(metrics);
+    } catch (error) {
+        res.status(500).json({
+            ok: false,
+            error: 'Failed to retrieve metrics',
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+router.post('/maintenance', async (req, res) => {
+    try {
+        const results = await performMaintenance();
+        res.json({ ok: true, ...results });
+    } catch (error) {
+        res.status(500).json({
+            ok: false,
+            error: 'Maintenance operation failed',
+            details: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
 });
 
 // Dashboard route

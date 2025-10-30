@@ -4,21 +4,21 @@ import { ULTRAVOX_CONFIG, ULTRAVOX_CALL_CONFIG } from '../config/index.js';
 /**
  * Helper function to make requests to the Ultravox API
  */
-async function requestUltravoxAPI(url, options) {
+async function requestUltravoxAPI(url, options, timeout = 10000) {
     return new Promise((resolve, reject) => {
         const request = https.request(url, options, (response) => {
             let data = '';
             response.on('data', (chunk) => (data += chunk));
             response.on('end', () => {
-                console.log(`Ultravox API response from ${url}: ${response.statusCode}`);
+                console.log(`🌐 Ultravox API response from ${url}: ${response.statusCode}`);
                 if (response.statusCode >= 400) {
-                    console.error(`Ultravox API Error: ${response.statusCode}`, data);
+                    console.error(`❌ Ultravox API Error: ${response.statusCode}`, data);
                     reject(new Error(`API error ${response.statusCode}: ${data}`));
                 } else {
                     try {
                         resolve(data ? JSON.parse(data) : {});
                     } catch (e) {
-                        console.error('Failed to parse Ultravox JSON response:', e, data);
+                        console.error('❌ Failed to parse Ultravox JSON response:', e, data.substring(0, 200));
                         reject(new Error('Failed to parse JSON response.'));
                     }
                 }
@@ -26,13 +26,13 @@ async function requestUltravoxAPI(url, options) {
         });
         
         request.on('error', (error) => {
-            console.error(`Ultravox API request error for ${url}:`, error);
+            console.error(`❌ Ultravox API request error for ${url}:`, error.message);
             reject(error);
         });
         
-        request.on('timeout', () => {
+        request.setTimeout(timeout, () => {
             request.destroy();
-            reject(new Error('Request timed out.'));
+            reject(new Error(`Request timed out after ${timeout}ms`));
         });
         
         if (options.body) {
@@ -41,6 +41,34 @@ async function requestUltravoxAPI(url, options) {
         
         request.end();
     });
+}
+
+/**
+ * Test Ultravox API connection
+ */
+export async function testUltravoxConnection() {
+    try {
+        if (!ULTRAVOX_CONFIG.apiKey) {
+            console.warn('⚠️ Ultravox API key not configured');
+            return false;
+        }
+
+        const url = `${ULTRAVOX_CONFIG.baseUrl}/calls?limit=1`;
+        const options = {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${ULTRAVOX_CONFIG.apiKey}`,
+                'Content-Type': 'application/json'
+            }
+        };
+
+        await requestUltravoxAPI(url, options, 5000); // Short timeout for health check
+        console.log('✅ Ultravox connection test successful');
+        return true;
+    } catch (error) {
+        console.error('❌ Ultravox connection test failed:', error.message);
+        return false;
+    }
 }
 
 /**

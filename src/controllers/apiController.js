@@ -3,231 +3,164 @@ import {
     getConversationById,
     refreshConversation,
     regenerateAnalysis,
-    batchRefreshConversations
+    batchRefreshConversations,
+    importConversationsFromUltravox,
+    validateConversationsAgainstUltravox
 } from '../services/conversation.js';
-import { listUltravoxCalls, getUltravoxCall, getUltravoxTranscriptFromMessages } from '../services/ultravox.js';
-import { classifyRiskAndCounselling } from '../services/riskAnalysis.js';
-import { upsertConversation } from '../database/connection.js';
+import { sendResponse, sendError, asyncHandler, validateRequired } from './baseController.js';
 
 /**
- * Get all conversations
+ * Get all conversations with enhanced filtering and sorting
  */
-export async function getAllConversations(req, res) {
-    try {
-        const conversations = await getConversations();
-        res.json({ ok: true, conversations });
-    } catch (error) {
-        console.error('Error fetching conversations:', error);
-        res.status(500).json({ ok: false, error: 'Internal server error' });
+export const getAllConversations = asyncHandler(async (req, res) => {
+    const { 
+        limit = 50, 
+        offset = 0, 
+        riskLevel, 
+        status, 
+        sortBy = 'createdAt', 
+        sortOrder = 'desc' 
+    } = req.query;
+    
+    const conversations = await getConversations();
+    
+    // Apply filters
+    let filtered = conversations;
+    if (riskLevel) {
+        filtered = filtered.filter(c => c.tendency === riskLevel);
     }
-}
+    if (status) {
+        filtered = filtered.filter(c => c.status === status);
+    }
+    
+    // Apply sorting
+    filtered.sort((a, b) => {
+        let aVal = a[sortBy];
+        let bVal = b[sortBy];
+        
+        if (sortBy === 'createdAt' || sortBy === 'updatedAt') {
+            aVal = new Date(aVal);
+            bVal = new Date(bVal);
+        }
+        
+        const multiplier = sortOrder === 'desc' ? -1 : 1;
+        return aVal < bVal ? -1 * multiplier : aVal > bVal ? 1 * multiplier : 0;
+    });
+    
+    // Apply pagination
+    const total = filtered.length;
+    const paginatedResults = filtered.slice(parseInt(offset), parseInt(offset) + parseInt(limit));
+    
+    return sendResponse(res, 200, {
+        conversations: paginatedResults,
+        pagination: {
+            total,
+            limit: parseInt(limit),
+            offset: parseInt(offset),
+            hasMore: (parseInt(offset) + parseInt(limit)) < total
+        }
+    });
+});
 
 /**
  * Refresh a specific conversation's transcript and recording
  */
-export async function refreshSpecificConversation(req, res) {
-    try {
-        const { id: callId } = req.params;
-        console.log(`🔄 Manual refresh requested for conversation: ${callId}`);
-        
-        const result = await refreshConversation(callId);
-        
-        console.log(`✅ Conversation refresh complete for ${callId}`);
-        res.json({ 
-            ok: true, 
-            conversation: result.conversation, 
-            message: result.transcriptUpdated ? 
-                'Transcript fetched and analysis updated' : 
-                'Analysis updated with existing data'
-        });
-    } catch (error) {
-        console.error('Error refreshing conversation:', error);
-        res.status(500).json({ ok: false, error: 'Internal server error' });
-    }
-}
+export const refreshSpecificConversation = asyncHandler(async (req, res) => {
+    const { id: callId } = req.params;
+    validateRequired({ callId }, ['callId']);
+    
+    console.log(`🔄 Manual refresh requested for conversation: ${callId}`);
+    
+    const result = await refreshConversation(callId);
+    
+    const message = result.transcriptUpdated ? 
+        'Transcript fetched and analysis updated successfully' : 
+        'Analysis updated with existing data';
+    
+    console.log(`✅ Conversation refresh complete for ${callId}`);
+    return sendResponse(res, 200, { conversation: result.conversation }, message);
+});
 
 /**
  * Regenerate AI analysis for a specific conversation
  */
-export async function regenerateConversationAnalysis(req, res) {
+export const regenerateConversationAnalysis = asyncHandler(async (req, res) => {
+    const { id: callId } = req.params;
+    validateRequired({ callId }, ['callId']);
+    
+    console.log(`🤖 Regenerating AI analysis for conversation: ${callId}`);
+    
     try {
-        const { id: callId } = req.params;
-        console.log(`🤖 Regenerating AI analysis for conversation: ${callId}`);
-        
         const updatedRecord = await regenerateAnalysis(callId);
         
         console.log(`✅ AI Analysis regeneration complete for ${callId}`);
-        res.json({ 
-            ok: true, 
-            conversation: updatedRecord, 
-            message: 'AI analysis has been successfully regenerated.' 
-        });
+        return sendResponse(res, 200, { conversation: updatedRecord }, 'AI analysis has been successfully regenerated');
     } catch (error) {
-        console.error('Error regenerating AI analysis:', error);
-        
         if (error.message === 'Conversation not found') {
-            return res.status(404).json({ ok: false, error: 'Conversation not found' });
+            return sendError(res, 404, 'Conversation not found');
         }
         if (error.message === 'Cannot regenerate analysis without a transcript') {
-            return res.status(400).json({ ok: false, error: 'Cannot regenerate analysis without a transcript.' });
+            return sendError(res, 400, 'Cannot regenerate analysis without a transcript');
         }
-        
-        res.status(500).json({ ok: false, error: 'Internal server error during analysis regeneration.' });
+        throw error; // Re-throw for asyncHandler to catch
     }
-}
+});
 
 /**
  * Batch refresh endpoint to update all conversations missing transcripts
  */
-export async function batchRefreshAllConversations(req, res) {
-    try {
-        console.log('🔄 Batch refresh requested for all conversations');
-        
-        const results = await batchRefreshConversations();
-        
-        console.log(`✅ Batch refresh complete - processed ${results.length} conversations`);
-        res.json({ 
-            ok: true, 
-            results, 
-            message: `Processed ${results.length} conversations` 
-        });
-    } catch (error) {
-        console.error('Error in batch refresh:', error);
-        res.status(500).json({ ok: false, error: 'Internal server error' });
-    }
-}
+export const batchRefreshAllConversations = asyncHandler(async (req, res) => {
+    console.log('🔄 Batch refresh requested for all conversations');
+    
+    const results = await batchRefreshConversations();
+    
+    const summary = {
+        total: results.length,
+        updated: results.filter(r => r.status === 'updated').length,
+        failed: results.filter(r => r.status === 'failed').length,
+        skipped: results.filter(r => r.status === 'skipped').length
+    };
+    
+    console.log(`✅ Batch refresh complete - processed ${results.length} conversations`);
+    return sendResponse(res, 200, { results, summary }, `Batch refresh completed: ${summary.updated} updated, ${summary.failed} failed, ${summary.skipped} skipped`);
+});
 
 /**
- * Import actual calls from Ultravox endpoint
+ * Import conversations from Ultravox
  */
-export async function importFromUltravox(req, res) {
-    try {
-        console.log('📥 Starting import of calls from Ultravox...');
-        const limit = parseInt(req.body.limit) || 20;
-
-        const callsResponse = await listUltravoxCalls(limit);
-        const calls = callsResponse.results || [];
-        console.log(`📋 Fetched ${calls.length} calls from Ultravox`);
-        
-        const results = [];
-        
-        for (const call of calls) {
-            try {
-                const callId = call.id || call.callId;
-                if (!callId) {
-                    results.push({ 
-                        id: 'unknown', 
-                        status: 'skipped', 
-                        message: 'No call ID found' 
-                    });
-                    continue;
-                }
-                
-                const [transcriptResult, callDetailsResult] = await Promise.allSettled([
-                    getUltravoxTranscriptFromMessages(callId),
-                    getUltravoxCall(callId),
-                ]);
-
-                const transcript = transcriptResult.status === 'fulfilled' ? transcriptResult.value : '';
-                const callDetails = callDetailsResult.status === 'fulfilled' ? callDetailsResult.value : null;
-
-                const analysis = await classifyRiskAndCounselling(transcript || 'Imported call - no transcript');
-                const existing = await getConversationById(callId);
-                
-                const record = {
-                    ...(existing || {}),
-                    id: callId,
-                    from: callDetails?.from || call.from || 'unknown',
-                    createdAt: call.createdAt || call.created_at || new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    transcript,
-                    recordingUrl: callDetails?.recordingUrl || '',
-                    summary: analysis.review,
-                    tendency: analysis.tendency,
-                    needsCounselling: analysis.needsCounselling,
-                    score: analysis.score,
-                    detectedTerms: analysis.detectedTerms,
-                    immediateIntervention: analysis.immediateIntervention,
-                    geminiAnalysis: analysis.geminiAnalysis,
-                    status: existing ? 'imported_updated' : 'imported',
-                    raw: { 
-                        ...(existing?.raw || {}), 
-                        importedCall: call, 
-                        importedDetails: callDetails 
-                    }
-                };
-                
-                await upsertConversation(record);
-                results.push({ 
-                    id: callId, 
-                    status: existing ? 'updated' : 'created', 
-                    message: 'Call data processed' 
-                });
-            } catch (callError) {
-                console.error(`Error processing call ${call.id}:`, callError);
-                results.push({ 
-                    id: call.id || 'unknown', 
-                    status: 'error', 
-                    message: callError.message 
-                });
-            }
-        }
-        
-        const created = results.filter(r => r.status === 'created').length;
-        const updated = results.filter(r => r.status === 'updated').length;
-        console.log(`📥 Import complete: ${created} created, ${updated} updated.`);
-        
-        res.json({ 
-            ok: true, 
-            summary: { created, updated }, 
-            results 
-        });
-    } catch (error) {
-        console.error('Error during import:', error);
-        res.status(500).json({ ok: false, error: error.message });
-    }
-}
+export const importFromUltravox = asyncHandler(async (req, res) => {
+    const { limit = 20 } = req.body;
+    
+    console.log('� Starting import of calls from Ultravox...');
+    
+    const results = await importConversationsFromUltravox(parseInt(limit));
+    
+    const summary = {
+        total: results.length,
+        created: results.filter(r => r.status === 'created').length,
+        updated: results.filter(r => r.status === 'updated').length,
+        errors: results.filter(r => r.status === 'error').length
+    };
+    
+    console.log(`📥 Import complete: ${summary.created} created, ${summary.updated} updated`);
+    return sendResponse(res, 200, { results, summary }, `Import completed: ${summary.created} new calls, ${summary.updated} updated calls`);
+});
 
 /**
- * Cleanup invalid calls endpoint
+ * Validate conversations against Ultravox data
  */
-export async function cleanupInvalidCalls(req, res) {
-    try {
-        console.log('🧹 Starting cleanup of invalid calls...');
-        const conversations = await getConversations();
-        const results = [];
-        
-        for (const conv of conversations) {
-            try {
-                await getUltravoxCall(conv.id);
-                results.push({ id: conv.id, status: 'valid' });
-            } catch (error) {
-                if (error.message.includes('404')) {
-                    results.push({ 
-                        id: conv.id, 
-                        status: 'invalid', 
-                        message: 'Not found in Ultravox' 
-                    });
-                } else {
-                    results.push({ 
-                        id: conv.id, 
-                        status: 'error', 
-                        message: error.message 
-                    });
-                }
-            }
-        }
-        
-        const invalidCount = results.filter(r => r.status === 'invalid').length;
-        console.log(`🧹 Cleanup complete: Found ${invalidCount} invalid calls.`);
-        
-        res.json({ 
-            ok: true, 
-            summary: { invalid: invalidCount }, 
-            results 
-        });
-    } catch (error) {
-        console.error('Error during cleanup:', error);
-        res.status(500).json({ ok: false, error: error.message });
-    }
-}
+export const cleanupInvalidCalls = asyncHandler(async (req, res) => {
+    console.log('🧹 Starting validation of calls against Ultravox...');
+    
+    const results = await validateConversationsAgainstUltravox();
+    
+    const summary = {
+        total: results.length,
+        valid: results.filter(r => r.status === 'valid').length,
+        invalid: results.filter(r => r.status === 'invalid').length,
+        errors: results.filter(r => r.status === 'error').length
+    };
+    
+    console.log(`🧹 Validation complete: ${summary.valid} valid, ${summary.invalid} invalid calls`);
+    return sendResponse(res, 200, { results, summary }, `Validation completed: ${summary.valid} valid calls, ${summary.invalid} invalid calls found`);
+});

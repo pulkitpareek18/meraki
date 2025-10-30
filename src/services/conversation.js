@@ -240,6 +240,158 @@ export async function batchRefreshConversations() {
 }
 
 /**
+ * Import conversations from Ultravox with better error handling and performance
+ */
+export async function importConversationsFromUltravox(limit = 20) {
+    console.log(`📥 Importing ${limit} conversations from Ultravox...`);
+    
+    const { listUltravoxCalls, getUltravoxCall, getUltravoxTranscriptFromMessages } = await import('./ultravox.js');
+    const { classifyRiskAndCounselling } = await import('./riskAnalysis.js');
+    
+    const callsResponse = await listUltravoxCalls(limit);
+    const calls = callsResponse.results || [];
+    console.log(`📋 Fetched ${calls.length} calls from Ultravox`);
+    
+    const results = [];
+    
+    // Process calls in batches to avoid overwhelming the system
+    const batchSize = 5;
+    for (let i = 0; i < calls.length; i += batchSize) {
+        const batch = calls.slice(i, i + batchSize);
+        
+        const batchResults = await Promise.allSettled(
+            batch.map(call => processUltravoxCall(call))
+        );
+        
+        batchResults.forEach((result, index) => {
+            const call = batch[index];
+            if (result.status === 'fulfilled') {
+                results.push(result.value);
+            } else {
+                console.error(`Error processing call ${call.id}:`, result.reason);
+                results.push({ 
+                    id: call.id || 'unknown', 
+                    status: 'error', 
+                    message: result.reason.message 
+                });
+            }
+        });
+        
+        // Small delay between batches
+        if (i + batchSize < calls.length) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+    }
+    
+    return results;
+    
+    async function processUltravoxCall(call) {
+        const callId = call.id || call.callId;
+        if (!callId) {
+            return { 
+                id: 'unknown', 
+                status: 'skipped', 
+                message: 'No call ID found' 
+            };
+        }
+        
+        const [transcriptResult, callDetailsResult] = await Promise.allSettled([
+            getUltravoxTranscriptFromMessages(callId),
+            getUltravoxCall(callId),
+        ]);
+
+        const transcript = transcriptResult.status === 'fulfilled' ? transcriptResult.value : '';
+        const callDetails = callDetailsResult.status === 'fulfilled' ? callDetailsResult.value : null;
+
+        const analysis = await classifyRiskAndCounselling(transcript || 'Imported call - no transcript');
+        const existing = await getConversationById(callId);
+        
+        const record = {
+            ...(existing || {}),
+            id: callId,
+            from: callDetails?.from || call.from || 'unknown',
+            createdAt: call.createdAt || call.created_at || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            transcript,
+            recordingUrl: callDetails?.recordingUrl || '',
+            summary: analysis.review,
+            tendency: analysis.tendency,
+            needsCounselling: analysis.needsCounselling,
+            score: analysis.score,
+            detectedTerms: analysis.detectedTerms,
+            immediateIntervention: analysis.immediateIntervention,
+            geminiAnalysis: analysis.geminiAnalysis,
+            status: existing ? 'imported_updated' : 'imported',
+            raw: { 
+                ...(existing?.raw || {}), 
+                importedCall: call, 
+                importedDetails: callDetails 
+            }
+        };
+        
+        await upsertConversation(record);
+        return { 
+            id: callId, 
+            status: existing ? 'updated' : 'created', 
+            message: 'Call data processed successfully' 
+        };
+    }
+}
+
+/**
+ * Validate conversations against Ultravox to identify orphaned records
+ */
+export async function validateConversationsAgainstUltravox() {
+    console.log('🧹 Validating conversations against Ultravox...');
+    
+    const { getUltravoxCall } = await import('./ultravox.js');
+    const conversations = await getConversations();
+    const results = [];
+    
+    // Process in batches to avoid rate limiting
+    const batchSize = 10;
+    for (let i = 0; i < conversations.length; i += batchSize) {
+        const batch = conversations.slice(i, i + batchSize);
+        
+        const batchResults = await Promise.allSettled(
+            batch.map(async conv => {
+                try {
+                    await getUltravoxCall(conv.id);
+                    return { id: conv.id, status: 'valid' };
+                } catch (error) {
+                    if (error.message.includes('404')) {
+                        return { 
+                            id: conv.id, 
+                            status: 'invalid', 
+                            message: 'Not found in Ultravox' 
+                        };
+                    } else {
+                        return { 
+                            id: conv.id, 
+                            status: 'error', 
+                            message: error.message 
+                        };
+                    }
+                }
+            })
+        );
+        
+        batchResults.forEach(result => {
+            if (result.status === 'fulfilled') {
+                results.push(result.value);
+            }
+        });
+        
+        // Small delay between batches
+        if (i + batchSize < conversations.length) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+    }
+    
+    return results;
+}
+
+/**
  * Build conversation history context for AI prompts
  */
 export function buildConversationHistoryContext(previousConversations) {
