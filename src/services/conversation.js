@@ -2,7 +2,8 @@ import {
     upsertConversation, 
     getConversations, 
     getConversationById,
-    findConversationByTwilioSid 
+    findConversationByTwilioSid,
+    getConversationsByPhoneNumber
 } from '../database/connection.js';
 import { 
     getUltravoxCall, 
@@ -238,10 +239,67 @@ export async function batchRefreshConversations() {
     return results;
 }
 
+/**
+ * Build conversation history context for AI prompts
+ */
+export function buildConversationHistoryContext(previousConversations) {
+    if (!previousConversations || previousConversations.length === 0) {
+        return '';
+    }
+
+    // Filter conversations that have meaningful transcripts and limit to last 5
+    const relevantConversations = previousConversations
+        .filter(conv => conv.transcript && conv.transcript.trim().length > 50)
+        .slice(0, 5);
+
+    if (relevantConversations.length === 0) {
+        return '';
+    }
+
+    let historyContext = '\n\n--- PREVIOUS CONVERSATION HISTORY ---\n';
+    historyContext += `This caller has spoken with you ${relevantConversations.length} time(s) before. Here\'s what was discussed:\n\n`;
+
+    relevantConversations.forEach((conv, index) => {
+        const date = new Date(conv.createdAt).toLocaleDateString('en-IN');
+        const time = new Date(conv.createdAt).toLocaleTimeString('en-IN', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
+        
+        historyContext += `CONVERSATION ${index + 1} (${date} at ${time}):\n`;
+        
+        // Add analysis summary if available
+        if (conv.summary) {
+            historyContext += `Previous Analysis: ${conv.summary}\n`;
+        }
+        
+        // Add key conversation excerpts (first 500 characters)
+        if (conv.transcript) {
+            const excerpt = conv.transcript.length > 500 
+                ? conv.transcript.substring(0, 500) + '...' 
+                : conv.transcript;
+            historyContext += `Key Discussion Points:\n${excerpt}\n`;
+        }
+        
+        historyContext += '\n';
+    });
+
+    historyContext += '--- END PREVIOUS HISTORY ---\n\n';
+    historyContext += 'Based on this history, please:\n';
+    historyContext += '- Remember what they shared before and acknowledge their journey\n';
+    historyContext += '- Show continuity in your support and understanding\n';
+    historyContext += '- Check in on any previous concerns they mentioned\n';
+    historyContext += '- Be aware of their emotional patterns and progress\n';
+    historyContext += '- Don\'t repeat the same advice unless they specifically ask for it\n\n';
+
+    return historyContext;
+}
+
 // Export database functions for backward compatibility
 export { 
     getConversations, 
     getConversationById, 
     findConversationByTwilioSid,
+    getConversationsByPhoneNumber,
     upsertConversation 
 };

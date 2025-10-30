@@ -157,7 +157,7 @@ async function performGeminiAnalysis(transcriptText) {
     const model = gemini.getGenerativeModel({ model: GEMINI_CONFIG.model });
     
     const prompt = `
-        Analyze the following conversation transcript for mental health risks. The user is talking to a supportive friend AI named Arjun.
+        Analyze the following conversation transcript for mental health risks. The user is talking to a supportive friend AI named Meraki.
         The conversation is primarily in Hindi.
         Provide your analysis ONLY in a valid JSON format. Do not include any text before or after the JSON object.
         

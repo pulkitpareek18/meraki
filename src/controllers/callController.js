@@ -1,7 +1,7 @@
 import twilio from 'twilio';
 import { createUltravoxCall } from '../services/ultravox.js';
-import { createConversation } from '../services/conversation.js';
-import { ULTRAVOX_CALL_CONFIG } from '../config/index.js';
+import { createConversation, getConversationsByPhoneNumber, buildConversationHistoryContext } from '../services/conversation.js';
+import { createSystemPromptWithHistory, createUltravoxCallConfig } from '../config/index.js';
 
 /**
  * Handle incoming Twilio calls
@@ -17,7 +17,24 @@ export async function handleIncomingCall(req, res) {
             throw new Error('No caller number found in request');
         }
         
-        const uvxResponse = await createUltravoxCall(ULTRAVOX_CALL_CONFIG);
+        console.log(`📞 Fetching conversation history for ${callerNumber}`);
+        
+        // Fetch previous conversations for this phone number
+        const previousConversations = await getConversationsByPhoneNumber(callerNumber);
+        console.log(`Found ${previousConversations.length} previous conversations for ${callerNumber}`);
+        
+        // Build conversation history context for the AI
+        const conversationHistoryContext = buildConversationHistoryContext(previousConversations);
+        
+        // Create enhanced system prompt with conversation history
+        const enhancedSystemPrompt = createSystemPromptWithHistory(conversationHistoryContext);
+        
+        // Create call configuration with the enhanced system prompt
+        const callConfig = createUltravoxCallConfig(enhancedSystemPrompt);
+        
+        console.log(`🤖 Creating Ultravox call with ${conversationHistoryContext ? 'enhanced' : 'standard'} prompt`);
+        
+        const uvxResponse = await createUltravoxCall(callConfig);
         console.log('Ultravox response structure:', JSON.stringify(uvxResponse, null, 2));
 
         // Handle different possible response structures

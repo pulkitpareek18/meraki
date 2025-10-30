@@ -123,6 +123,28 @@ export async function findConversationByTwilioSid(twilioCallSid) {
 }
 
 /**
+ * Get all conversations for a specific phone number, sorted by date (most recent first)
+ */
+export async function getConversationsByPhoneNumber(phoneNumber) {
+    try {
+        if (conversationsCol) {
+            return await conversationsCol
+                .find({ from: phoneNumber })
+                .sort({ updatedAt: -1 })
+                .toArray();
+        }
+        
+        const list = await getConversations();
+        return list
+            .filter(x => x.from === phoneNumber)
+            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    } catch (error) {
+        console.error('Failed to get conversations by phone number:', error);
+        return [];
+    }
+}
+
+/**
  * Close database connection
  */
 export async function closeDatabaseConnection() {
