@@ -1,77 +1,35 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GEMINI_CONFIG } from '../config/index.js';
 
+/**
+ * =========================================================================
+ * PURE GEMINI AI MENTAL HEALTH ANALYSIS - NO PATTERN MATCHING
+ * =========================================================================
+ * 
+ * This module performs mental health risk assessment using ONLY Gemini AI.
+ * 
+ * ❌ NO word patterns, keyword matching, or rule-based analysis
+ * ✅ 100% AI-driven assessment from audio recordings and transcripts
+ * ✅ Gemini analyzes tone, context, emotional indicators, and content
+ * ✅ Professional-grade mental health evaluation
+ * 
+ * All risk assessment, scoring, and recommendations come from Gemini AI.
+ */
+
 // Initialize Gemini AI if API key is available
 let gemini;
 if (GEMINI_CONFIG.apiKey) {
     try {
         gemini = new GoogleGenerativeAI(GEMINI_CONFIG.apiKey);
-        console.log('✅ Gemini AI initialized successfully');
+        console.log('✅ Pure Gemini AI mental health analyzer initialized successfully');
     } catch (e) {
         console.warn('⚠️ Failed to init Gemini SDK:', e);
     }
 } else {
-    console.warn('⚠️ Gemini API key not configured - AI analysis will be skipped');
+    console.warn('⚠️ Gemini API key not configured - AI analysis unavailable');
 }
 
-// Cache for risk term patterns (compiled once for better performance)
-const RISK_PATTERNS = {
-    critical_severe: {
-        score: 8,
-        terms: [
-            'suicide', 'kill myself', 'end my life', 'i want to die', 'hang myself', 
-            'take my own life', 'marna chahta hun', 'jaan dena', 'suicide karna'
-        ]
-    },
-    severe_plan: {
-        score: 6,
-        terms: [
-            'jump off', 'overdose', 'self harm', 'self-harm', 'cut myself', 'razor blade', 
-            'poison myself', 'gun to my head', 'bought a rope', 'bought pills', 'wrote a note'
-        ]
-    },
-    high: {
-        score: 3,
-        terms: [
-            'i am going to', 'i have a plan', 'goodbye forever', 'can\'t go on', 'hopeless', 
-            'life is meaningless', 'nothing matters', 'give up completely', 'no way out', 
-            'trapped forever', 'can\'t escape', 'ready to go', 'final decision', 'said goodbye', 
-            'planning to end', 'going to jump', 'no reason to live', 'better off dead', 
-            'koi raah nahi', 'umeed khatam', 'plan bana liya', 'alvida keh diya', 
-            'bass khatam', 'zindagi khatam'
-        ]
-    },
-    medium: {
-        score: 2,
-        terms: [
-            'depressed', 'depression', 'anxious', 'panic', 'can\'t sleep', 'lost interest', 
-            'crying a lot', 'worthless', 'feeling empty', 'numb inside', 'constant pain', 
-            'overwhelming sadness', 'can\'t cope', 'breaking down', 'lost control', 'spiraling', 
-            'dark thoughts', 'intrusive thoughts', 'mental breakdown', 'emotional pain', 
-            'pareshan hun', 'depression hai', 'udaas hun', 'ro raha hun', 
-            'kuch samajh nahi aa raha', 'pareshani hai', 'anxiety hai', 'ghabrat hai', 'dukh hai'
-        ]
-    },
-    low: {
-        score: 1,
-        terms: [
-            'stressed', 'sad', 'lonely', 'down', 'upset', 'tired of everything', 'frustrated', 
-            'annoyed', 'irritated', 'fed up', 'overwhelmed', 'exhausted', 'burned out', 
-            'bothered', 'disappointed', 'discouraged', 'moody', 'grumpy', 'pareshaan', 
-            'gussa', 'tension', 'thak gaya', 'bore ho gaya', 'irritate ho raha', 
-            'tang aa gaya', 'dimag kharab', 'stress hai'
-        ]
-    }
-};
 
-// Compile immediate risk patterns once
-const IMMEDIATE_RISK_PATTERNS = [
-    /i\s+(am|will|going to)\s+(kill|end|hurt|harm)\s+(my)/i,
-    /tonight\s+(i|will|going)/i,
-    /(plan|planning)\s+to\s+(die|kill|end)/i,
-    /(ready|prepared)\s+to\s+(die|go|leave)/i,
-    /going\s+to\s+(jump|hang)/i
-];
 
 // Performance optimization: Cache for analysis results (simple in-memory cache)
 const analysisCache = new Map();
@@ -102,13 +60,14 @@ function setCachedAnalysis(key, data) {
 }
 
 /**
- * NEW: Complete Analysis with Audio Recording via Gemini AI
+ * Complete Analysis with Audio Recording via Gemini AI - GEMINI DOES EVERYTHING
  * Always fetches fresh recording URL from Ultravox to avoid expiration issues
+ * No pattern matching or word analysis - Pure Gemini AI assessment
  */
 export async function analyzeAudioRecording(callId) {
     const startTime = Date.now();
     
-    console.log(`🎵 Starting audio analysis for call: ${callId}`);
+    console.log(`🎵 Starting pure Gemini audio analysis for call: ${callId}`);
     
     // Input validation
     if (!callId || typeof callId !== 'string') {
@@ -125,7 +84,6 @@ export async function analyzeAudioRecording(callId) {
     }
     
     // IMPORTANT: Always fetch fresh recording URL from Ultravox API
-    // The stored URLs contain expiration tokens (5 minutes) and will fail if expired
     console.log('📥 Fetching fresh recording URL from Ultravox API...');
     let freshRecordingUrl;
     
@@ -141,69 +99,63 @@ export async function analyzeAudioRecording(callId) {
         };
     }
     
-    let audioAnalysis = null;
-    
-    if (gemini) {
-        try {
-            console.log('🤖 Starting Gemini audio analysis with fresh URL...');
-            audioAnalysis = await performGeminiAudioAnalysisWithRetry(freshRecordingUrl, callId, 2);
-            console.log('✅ Gemini audio analysis completed successfully');
-        } catch (e) {
-            console.warn('⚠️ Gemini audio analysis failed:', e.message);
-            audioAnalysis = { 
-                error: e.message, 
-                fallback: true,
-                ...generateDefaultAudioResponse()
-            };
-        }
-    } else {
-        console.warn('⚠️ Gemini AI not available - cannot analyze audio');
-        return generateDefaultAudioResponse();
+    // Ensure Gemini is available - no fallback to pattern matching
+    if (!gemini) {
+        console.error('⚠️ Gemini AI not available - pure AI analysis cannot proceed');
+        return {
+            ...generateDefaultAudioResponse(),
+            error: 'Gemini AI not configured - cannot perform audio analysis'
+        };
     }
     
-    // Calculate legacy risk score for backwards compatibility
-    const legacyScore = calculateLegacyRiskScore(audioAnalysis);
+    let audioAnalysis = null;
     
+    try {
+        console.log('🤖 Starting pure Gemini audio analysis (no pattern matching)...');
+        audioAnalysis = await performGeminiAudioAnalysisWithRetry(freshRecordingUrl, callId, 2);
+        console.log('✅ Pure Gemini audio analysis completed successfully');
+    } catch (e) {
+        console.error('❌ Gemini audio analysis failed:', e.message);
+        return {
+            ...generateDefaultAudioResponse(),
+            error: `Gemini analysis failed: ${e.message}`
+        };
+    }
+    
+    // Build result entirely from Gemini analysis - no legacy calculations
     const result = {
-        // New comprehensive data from Gemini
+        // All data comes from Gemini AI
         transcript: audioAnalysis.transcript || '',
-        analysis: {
-            risk_level: audioAnalysis.risk_level || 'no',
-            counseling_needed: audioAnalysis.counseling_needed || 'no',
-            immediate_intervention: audioAnalysis.immediate_intervention || 'no',
-            emotional_state: audioAnalysis.emotional_state || 'Unknown',
-            concerning_phrases: audioAnalysis.concerning_phrases || [],
-            assessment_summary: audioAnalysis.assessment_summary || 'No assessment available',
-            confidence_level: audioAnalysis.confidence_level || 'medium',
-            language_used: audioAnalysis.language_used || 'unknown',
-            support_recommendations: audioAnalysis.support_recommendations || 'Continue supportive engagement'
-        },
+        analysis: audioAnalysis, // Complete Gemini analysis object
         
-        // Legacy fields for backwards compatibility
+        // Legacy fields mapped directly from Gemini (no pattern matching)
         tendency: audioAnalysis.risk_level || 'no',
         needsCounselling: audioAnalysis.counseling_needed || 'no',
-        review: generateReviewSummary(audioAnalysis.risk_level || 'no', legacyScore),
-        score: legacyScore,
-        detectedTerms: [], // Not applicable for audio analysis
+        review: audioAnalysis.assessment_summary || 'No assessment available',
+        score: mapRiskLevelToScore(audioAnalysis.risk_level), // Convert risk level to score
+        detectedTerms: (audioAnalysis.concerning_phrases || []).map(phrase => ({
+            term: phrase,
+            category: 'gemini_identified'
+        })),
         geminiAnalysis: audioAnalysis,
         immediateIntervention: audioAnalysis.immediate_intervention === 'yes',
         
         // Metadata
         processingTime: Date.now() - startTime,
-        source: 'audio_gemini_analysis',
-        recordingUrl: freshRecordingUrl, // Fresh URL from Ultravox API
+        source: 'pure_gemini_audio_analysis',
+        recordingUrl: freshRecordingUrl,
         callId: callId
     };
     
     // Cache the result
     setCachedAnalysis(cacheKey, result);
     
-    console.log(`🎯 Audio analysis completed in ${result.processingTime}ms - Risk: ${result.tendency}, Transcript: ${result.transcript.length} chars`);
+    console.log(`🎯 Pure Gemini analysis completed in ${result.processingTime}ms - Risk: ${result.tendency}, Score: ${result.score}`);
     return result;
 }
 
 /**
- * Legacy function maintained for backwards compatibility - now redirects to audio analysis if transcript is a URL
+ * Pure Gemini text analysis - no pattern matching, Gemini does everything
  */
 export async function classifyRiskAndCounselling(transcriptOrUrl, callId = null) {
     // Check if input looks like a URL (recording URL)
@@ -212,7 +164,7 @@ export async function classifyRiskAndCounselling(transcriptOrUrl, callId = null)
         return await analyzeAudioRecording(transcriptOrUrl, callId);
     }
     
-    // Original text-based analysis (legacy support)
+    // Pure Gemini text analysis
     const startTime = Date.now();
     
     // Input validation
@@ -221,98 +173,65 @@ export async function classifyRiskAndCounselling(transcriptOrUrl, callId = null)
         return generateDefaultResponse();
     }
     
-    const text = transcriptOrUrl.toLowerCase().trim();
+    const text = transcriptOrUrl.trim();
     
     // Check cache first
-    const cacheKey = `analysis_${Buffer.from(text.substring(0, 200)).toString('base64')}`;
+    const cacheKey = `gemini_text_analysis_${Buffer.from(text.substring(0, 200)).toString('base64')}`;
     const cachedResult = getCachedAnalysis(cacheKey);
     if (cachedResult) {
-        console.log('📋 Using cached analysis result');
+        console.log('📋 Using cached Gemini text analysis result');
         return cachedResult;
     }
     
-    let score = 0;
-    let detectedTerms = [];
-    
-    // Optimized term matching using the pre-compiled patterns
-    Object.entries(RISK_PATTERNS).forEach(([category, pattern]) => {
-        pattern.terms.forEach(term => {
-            if (text.includes(term)) {
-                score += pattern.score;
-                detectedTerms.push({ term, category });
-            }
-        });
-    });
-
-    // Check for immediate risk patterns using pre-compiled regex
-    IMMEDIATE_RISK_PATTERNS.forEach(pattern => {
-        if (pattern.test(text)) {
-            score += 10;
-            detectedTerms.push({ term: 'immediate_risk_pattern', category: 'critical_severe' });
-        }
-    });
-    
-    // Determine risk level and counselling needs
-    const riskAssessment = assessRiskLevel(score);
-    
-    // Generate Gemini AI analysis (with timeout and retry logic)
-    let geminiAnalysis = null;
-    if (gemini && text.length > 50) {
-        try {
-            console.log('🤖 Starting Gemini analysis...');
-            geminiAnalysis = await performGeminiAnalysisWithRetry(transcriptOrUrl, 2);
-            console.log('✅ Gemini analysis completed successfully');
-        } catch (e) {
-            console.warn('⚠️ Gemini analysis failed:', e.message);
-            geminiAnalysis = { error: e.message, fallback: true };
-        }
+    // Ensure Gemini is available - no pattern matching fallback
+    if (!gemini) {
+        console.error('⚠️ Gemini AI not available - pure AI analysis cannot proceed');
+        return {
+            ...generateDefaultResponse(),
+            error: 'Gemini AI not configured - cannot perform text analysis'
+        };
     }
     
+    // Pure Gemini analysis - no pattern matching at all
+    let geminiAnalysis = null;
+    
+    try {
+        console.log('🤖 Starting pure Gemini text analysis (no pattern matching)...');
+        geminiAnalysis = await performGeminiAnalysisWithRetry(transcriptOrUrl, 2);
+        console.log('✅ Pure Gemini text analysis completed successfully');
+    } catch (e) {
+        console.error('❌ Gemini text analysis failed:', e.message);
+        return {
+            ...generateDefaultResponse(),
+            error: `Gemini analysis failed: ${e.message}`
+        };
+    }
+    
+    // Build result entirely from Gemini analysis
     const result = {
-        ...riskAssessment,
-        score,
-        detectedTerms,
+        // All assessment comes from Gemini
+        tendency: geminiAnalysis.risk_level || 'no',
+        needsCounselling: geminiAnalysis.counseling_needed || 'no',
+        review: geminiAnalysis.assessment_summary || 'No assessment available',
+        score: mapRiskLevelToScore(geminiAnalysis.risk_level),
+        detectedTerms: (geminiAnalysis.concerning_phrases || []).map(phrase => ({
+            term: phrase,
+            category: 'gemini_identified'
+        })),
         geminiAnalysis,
-        immediateIntervention: riskAssessment.tendency === 'severe' || 
-                              detectedTerms.some(t => t.category === 'critical_severe') || 
-                              (geminiAnalysis?.immediate_intervention === 'yes'),
-        processingTime: Date.now() - startTime
+        immediateIntervention: geminiAnalysis.immediate_intervention === 'yes',
+        processingTime: Date.now() - startTime,
+        source: 'pure_gemini_text_analysis'
     };
     
     // Cache the result
     setCachedAnalysis(cacheKey, result);
     
-    console.log(`🎯 Risk analysis completed in ${result.processingTime}ms - Risk: ${result.tendency}, Score: ${score}`);
+    console.log(`🎯 Pure Gemini text analysis completed in ${result.processingTime}ms - Risk: ${result.tendency}, Score: ${result.score}`);
     return result;
 }
 
-/**
- * Assess risk level and counselling needs based on score
- */
-function assessRiskLevel(score) {
-    let tendency = 'no';
-    let needsCounselling = 'no';
-    
-    if (score >= 10) {
-        tendency = 'severe';
-        needsCounselling = 'yes';
-    } else if (score >= 6) {
-        tendency = 'high';
-        needsCounselling = 'yes';
-    } else if (score >= 4) {
-        tendency = 'medium';
-        needsCounselling = 'advised';
-    } else if (score >= 1) {
-        tendency = 'low';
-        needsCounselling = 'no';
-    }
-    
-    return {
-        tendency,
-        needsCounselling,
-        review: generateReviewSummary(tendency, score)
-    };
-}
+
 
 /**
  * Download audio file from URL
@@ -347,32 +266,19 @@ async function downloadAudioFile(url) {
 }
 
 /**
- * Calculate legacy risk score from Gemini analysis for backwards compatibility
+ * Map Gemini risk level to numerical score (no pattern matching)
  */
-function calculateLegacyRiskScore(analysis) {
-    if (!analysis || !analysis.risk_level) return 0;
-    
+function mapRiskLevelToScore(riskLevel) {
     const riskLevelScores = {
         'no': 0,
-        'low': 1,
-        'medium': 3,
-        'high': 6,
-        'severe': 10
+        'low': 2,
+        'medium': 4,
+        'high': 7,
+        'severe': 10,
+        'unknown': 0
     };
     
-    let score = riskLevelScores[analysis.risk_level] || 0;
-    
-    // Add points for concerning phrases
-    if (analysis.concerning_phrases && analysis.concerning_phrases.length > 0) {
-        score += analysis.concerning_phrases.length;
-    }
-    
-    // Add points for immediate intervention
-    if (analysis.immediate_intervention === 'yes') {
-        score += 5;
-    }
-    
-    return score;
+    return riskLevelScores[riskLevel] || 0;
 }
 
 /**
@@ -499,32 +405,45 @@ async function performGeminiAudioAnalysis(recordingUrl, callId, isLastAttempt = 
         // Get Gemini model with vision/audio capabilities
         const model = gemini.getGenerativeModel({ model: "gemini-2.5-pro" });
         
-        // Create the comprehensive prompt for audio analysis
-        const prompt = `Please analyze this mental health support call recording and provide a comprehensive analysis. 
+        // Comprehensive prompt for complete AI analysis - Gemini does EVERYTHING
+        const prompt = `You are a professional mental health analyst. Analyze this complete mental health support call recording and provide comprehensive assessment. 
 
-IMPORTANT: Respond ONLY with valid JSON in this exact format:
+CRITICAL: This is the ONLY analysis - no pattern matching or keyword detection will be used. Your assessment must be complete and accurate.
+
+Respond ONLY with valid JSON in this exact format:
 
 {
-  "transcript": "full conversation transcript with speaker labels (User: / Agent:)",
+  "transcript": "complete conversation transcript with clear speaker labels (Caller: / Agent:)",
   "risk_level": "no|low|medium|high|severe",
-  "counseling_needed": "no|advised|yes",
+  "counseling_needed": "no|advised|yes", 
   "immediate_intervention": "yes|no",
-  "emotional_state": "detailed emotional state of the caller",
-  "concerning_phrases": ["list of concerning phrases or statements"],
-  "assessment_summary": "comprehensive assessment paragraph including emotional state, risk factors, and recommendations", 
-  "confidence_level": "low|medium|high",
+  "emotional_state": "detailed emotional and psychological state assessment",
+  "concerning_phrases": ["direct quotes of concerning statements - up to 10 most significant"],
+  "assessment_summary": "comprehensive professional mental health assessment including risk factors, emotional state, behavioral indicators, and clinical observations",
+  "confidence_level": "low|medium|high", 
   "language_used": "hindi|english|hinglish|other",
-  "support_recommendations": "specific actionable recommendations for support"
+  "support_recommendations": "specific, actionable professional recommendations for immediate and ongoing support"
 }
 
-Please listen carefully to the entire conversation and provide:
-1. A complete transcript with speaker identification
-2. Mental health risk assessment 
-3. Emotional state analysis
-4. Any concerning language or indicators
-5. Professional recommendations for support
+ANALYZE FOR:
+✅ Suicidal ideation (direct/indirect)
+✅ Self-harm indicators  
+✅ Depression symptoms
+✅ Anxiety disorders
+✅ Emotional distress levels
+✅ Coping mechanisms
+✅ Support systems
+✅ Crisis indicators
+✅ Behavioral changes
+✅ Sleep/appetite changes
+✅ Social withdrawal
+✅ Substance use
+✅ Trauma indicators
+✅ Hopelessness/helplessness
+✅ Mood patterns
+✅ Cognitive distortions
 
-Focus on identifying signs of distress, suicidal ideation, depression, anxiety, or other mental health concerns.`;
+Provide thorough analysis based on tone, speech patterns, content, emotional expressions, and psychological indicators throughout the entire conversation.`;
 
         console.log(`🤖 Sending audio to Gemini for analysis... (File size: ${(audioBuffer.length / 1024 / 1024).toFixed(2)}MB)`);
         console.log('⏳ This may take 2-5 minutes for large audio files. Please wait...');
@@ -585,23 +504,28 @@ Focus on identifying signs of distress, suicidal ideation, depression, anxiety, 
 async function performGeminiAnalysis(transcriptText, isLastAttempt = false) {
     const model = gemini.getGenerativeModel({ model: GEMINI_CONFIG.model });
     
-    // Optimized prompt for better performance and accuracy
-    const prompt = `Analyze this mental health support conversation transcript. Respond ONLY with valid JSON.
+    // Comprehensive prompt for complete AI text analysis - Gemini does EVERYTHING
+    const prompt = `You are a professional mental health analyst. Analyze this mental health support conversation transcript completely.
 
-Required format:
+CRITICAL: This is the ONLY analysis - no pattern matching or keyword detection will be used. Your assessment must be complete and accurate.
+
+Respond ONLY with valid JSON:
+
 {
   "risk_level": "no|low|medium|high|severe",
   "counseling_needed": "no|advised|yes", 
   "immediate_intervention": "yes|no",
-  "emotional_state": "brief emotional state description",
-  "concerning_phrases": ["up to 3 most concerning direct quotes"],
-  "assessment_summary": "one paragraph analysis summary",
+  "emotional_state": "detailed emotional and psychological state",
+  "concerning_phrases": ["direct quotes of concerning statements - up to 10"],
+  "assessment_summary": "comprehensive professional mental health assessment",
   "confidence_level": "low|medium|high",
-  "language_used": "hindi|english|hinglish",
-  "support_recommendations": "one actionable recommendation"
+  "language_used": "hindi|english|hinglish|other",
+  "support_recommendations": "specific actionable recommendations"
 }
 
-Transcript: "${transcriptText.substring(0, 2000)}"`;
+ANALYZE FOR: Suicidal ideation, self-harm, depression, anxiety, emotional distress, coping mechanisms, support systems, crisis indicators, behavioral changes, hopelessness, mood patterns, cognitive distortions.
+
+Transcript: "${transcriptText.substring(0, 4000)}"`;
     
     // Create a promise that will timeout after 15 seconds
     const timeoutPromise = new Promise((_, reject) => {
@@ -667,7 +591,7 @@ function generateReviewSummary(tendency, score = 0) {
 }
 
 /**
- * Get risk analysis statistics for performance monitoring
+ * Get pure Gemini analysis statistics for performance monitoring
  */
 export function getRiskAnalysisStats() {
     return {
@@ -675,8 +599,9 @@ export function getRiskAnalysisStats() {
         cacheMaxSize: CACHE_MAX_SIZE,
         cacheTtl: CACHE_TTL,
         geminiAvailable: !!gemini,
-        patternsLoaded: Object.keys(RISK_PATTERNS).length,
-        immediatePatterns: IMMEDIATE_RISK_PATTERNS.length
+        analysisMethod: 'pure_gemini_ai',
+        patternMatching: false,
+        aiModel: GEMINI_CONFIG.model
     };
 }
 

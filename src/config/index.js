@@ -3,7 +3,7 @@ import 'dotenv/config';
 // Server configuration
 export const SERVER_CONFIG = {
     port: Number(process.env.PORT || 5000),
-    baseUrl: process.env.BASE_URL || 'https://twilio-incoming-ultravox-agent.onrender.com',
+    baseUrl: process.env.BASE_URL || 'https://meraki-iibi.onrender.com',
     environment: process.env.NODE_ENV || 'development'
 };
 
