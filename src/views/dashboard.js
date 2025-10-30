@@ -274,49 +274,7 @@ export function generateDashboardHTML(conversations) {
                 50% { opacity: 0.5; } 
             }
 
-            /* Action buttons */
-            .actions { 
-                margin: 20px 0; 
-                padding: 20px; 
-                background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); 
-                border-radius: 12px; 
-                border: 1px solid #bae6fd; 
-            }
-            .btn { 
-                padding: 10px 16px; 
-                margin: 5px; 
-                border: none; 
-                border-radius: 8px; 
-                cursor: pointer; 
-                font-size: 14px; 
-                font-weight: 600; 
-                transition: all 0.2s ease; 
-                text-decoration: none; 
-                display: inline-block; 
-            }
-            .btn:hover { transform: translateY(-1px); }
-            .btn-primary { 
-                background: linear-gradient(135deg, #3b82f6, #2563eb); 
-                color: white; 
-                box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3); 
-            }
-            .btn-primary:hover { 
-                background: linear-gradient(135deg, #2563eb, #1d4ed8); 
-                box-shadow: 0 6px 12px -1px rgba(59, 130, 246, 0.4); 
-            }
-            .btn-secondary { 
-                background: linear-gradient(135deg, #6b7280, #4b5563); 
-                color: white; 
-                box-shadow: 0 4px 6px -1px rgba(107, 114, 128, 0.3); 
-            }
-            .btn-secondary:hover { 
-                background: linear-gradient(135deg, #4b5563, #374151); 
-            }
-            .loading { 
-                display: none; 
-                color: #3b82f6; 
-                font-weight: 600; 
-            }
+
 
             /* Table improvements */
             table { 
@@ -432,8 +390,6 @@ export function generateDashboardHTML(conversations) {
             @media (max-width: 768px) {
                 .analytics-grid { grid-template-columns: 1fr; }
                 table { font-size: 11px; }
-                .actions { text-align: center; }
-                .btn { display: block; width: 100%; margin: 5px 0; }
                 .action-buttons { flex-direction: column; }
             }
         </style>
@@ -442,14 +398,7 @@ export function generateDashboardHTML(conversations) {
         <h2>🧠 Mental Health Monitoring Dashboard</h2>
         <p><a href="/health">Health Check</a> | <a href="/api/conversations">API</a></p>
         
-        <div class="actions">
-            <button class="btn btn-primary" onclick="refreshAllConversations()">🔄 Refresh All Missing Transcripts</button>
-            <button class="btn btn-primary" onclick="importFromUltravox()" style="background:#059669;">📥 Import from Ultravox</button>
-            <button class="btn btn-secondary" onclick="cleanupInvalidCalls()" style="background:#dc2626;">🧹 Cleanup Invalid Calls</button>
-            <button class="btn btn-secondary" onclick="location.reload()">🔃 Reload Dashboard</button>
-            <span class="loading" id="loading">⏳ Processing...</span>
-            <div id="result" style="margin-top:10px;"></div>
-        </div>
+
         
         ${generateAnalyticsCards(conversations)}
         
@@ -484,96 +433,20 @@ export function generateDashboardHTML(conversations) {
         <script>
             async function refreshConversation(id) {
                 try {
-                    document.getElementById('loading').style.display = 'inline';
                     const response = await fetch(\`/api/conversations/\${id}/refresh\`, { 
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' }
                     });
                     const result = await response.json();
-                    document.getElementById('loading').style.display = 'none';
                     
                     if (result.ok) {
-                        document.getElementById('result').innerHTML = \`<div style="color:green;">✅ \${result.message}</div>\`;
-                        setTimeout(() => location.reload(), 2000);
+                        alert('✅ ' + result.message);
+                        location.reload();
                     } else {
-                        document.getElementById('result').innerHTML = \`<div style="color:red;">❌ \${result.error}</div>\`;
+                        alert('❌ ' + result.error);
                     }
                 } catch (error) {
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('result').innerHTML = \`<div style="color:red;">❌ Error: \${error.message}</div>\`;
-                }
-            }
-            
-            async function refreshAllConversations() {
-                try {
-                    document.getElementById('loading').style.display = 'inline';
-                    const response = await fetch('/api/conversations/refresh-all', { 
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-                    const result = await response.json();
-                    document.getElementById('loading').style.display = 'none';
-                    
-                    if (result.ok) {
-                        const updated = result.results.filter(r => r.status === 'updated').length;
-                        const failed = result.results.filter(r => r.status === 'failed').length;
-                        document.getElementById('result').innerHTML = \`<div style="color:green;">✅ Processed \${result.results.length} conversations: \${updated} updated, \${failed} failed</div>\`;
-                        setTimeout(() => location.reload(), 3000);
-                    } else {
-                        document.getElementById('result').innerHTML = \`<div style="color:red;">❌ \${result.error}</div>\`;
-                    }
-                } catch (error) {
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('result').innerHTML = \`<div style="color:red;">❌ Error: \${error.message}</div>\`;
-                }
-            }
-            
-            async function importFromUltravox() {
-                try {
-                    document.getElementById('loading').style.display = 'inline';
-                    const response = await fetch('/api/conversations/import-from-ultravox', { 
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ limit: 20 })
-                    });
-                    const result = await response.json();
-                    document.getElementById('loading').style.display = 'none';
-                    
-                    if (result.ok) {
-                        const created = result.summary.created;
-                        const updated = result.summary.updated;
-                        document.getElementById('result').innerHTML = \`<div style="color:green;">📥 Import complete: \${created} new calls, \${updated} updated calls</div>\`;
-                        setTimeout(() => location.reload(), 3000);
-                    } else {
-                        document.getElementById('result').innerHTML = \`<div style="color:red;">❌ \${result.error}</div>\`;
-                    }
-                } catch (error) {
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('result').innerHTML = \`<div style="color:red;">❌ Error: \${error.message}</div>\`;
-                }
-            }
-            
-            async function cleanupInvalidCalls() {
-                try {
-                    document.getElementById('loading').style.display = 'inline';
-                    const response = await fetch('/api/conversations/cleanup-invalid', { 
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-                    const result = await response.json();
-                    document.getElementById('loading').style.display = 'none';
-                    
-                    if (result.ok) {
-                        const invalid = result.summary.invalid;
-                        const valid = result.summary.valid;
-                        document.getElementById('result').innerHTML = \`<div style="color:green;">🧹 Cleanup complete: \${valid} valid calls, \${invalid} invalid calls found</div>\`;
-                        setTimeout(() => location.reload(), 2000);
-                    } else {
-                        document.getElementById('result').innerHTML = \`<div style="color:red;">❌ \${result.error}</div>\`;
-                    }
-                } catch (error) {
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('result').innerHTML = \`<div style="color:red;">❌ Error: \${error.message}</div>\`;
+                    alert('❌ Error: ' + error.message);
                 }
             }
         </script>

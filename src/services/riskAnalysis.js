@@ -102,18 +102,126 @@ function setCachedAnalysis(key, data) {
 }
 
 /**
- * Enhanced Risk Classification with Gemini AI Analysis and Caching
+ * NEW: Complete Analysis with Audio Recording via Gemini AI
+ * Always fetches fresh recording URL from Ultravox to avoid expiration issues
  */
-export async function classifyRiskAndCounselling(transcriptText) {
+export async function analyzeAudioRecording(callId) {
+    const startTime = Date.now();
+    
+    console.log(`🎵 Starting audio analysis for call: ${callId}`);
+    
+    // Input validation
+    if (!callId || typeof callId !== 'string') {
+        console.warn('⚠️ Invalid call ID provided for analysis');
+        return generateDefaultAudioResponse();
+    }
+    
+    // Check cache first using call ID
+    const cacheKey = `audio_analysis_${callId}`;
+    const cachedResult = getCachedAnalysis(cacheKey);
+    if (cachedResult) {
+        console.log('📋 Using cached audio analysis result');
+        return cachedResult;
+    }
+    
+    // IMPORTANT: Always fetch fresh recording URL from Ultravox API
+    // The stored URLs contain expiration tokens (5 minutes) and will fail if expired
+    console.log('📥 Fetching fresh recording URL from Ultravox API...');
+    let freshRecordingUrl;
+    
+    try {
+        const { getUltravoxCallRecording } = await import('./ultravox.js');
+        freshRecordingUrl = await getUltravoxCallRecording(callId);
+        console.log(`✅ Fresh recording URL obtained: ${freshRecordingUrl.substring(0, 80)}...`);
+    } catch (error) {
+        console.error(`❌ Failed to fetch fresh recording URL for ${callId}:`, error.message);
+        return {
+            ...generateDefaultAudioResponse(),
+            error: `Failed to fetch recording: ${error.message}`
+        };
+    }
+    
+    let audioAnalysis = null;
+    
+    if (gemini) {
+        try {
+            console.log('🤖 Starting Gemini audio analysis with fresh URL...');
+            audioAnalysis = await performGeminiAudioAnalysisWithRetry(freshRecordingUrl, callId, 2);
+            console.log('✅ Gemini audio analysis completed successfully');
+        } catch (e) {
+            console.warn('⚠️ Gemini audio analysis failed:', e.message);
+            audioAnalysis = { 
+                error: e.message, 
+                fallback: true,
+                ...generateDefaultAudioResponse()
+            };
+        }
+    } else {
+        console.warn('⚠️ Gemini AI not available - cannot analyze audio');
+        return generateDefaultAudioResponse();
+    }
+    
+    // Calculate legacy risk score for backwards compatibility
+    const legacyScore = calculateLegacyRiskScore(audioAnalysis);
+    
+    const result = {
+        // New comprehensive data from Gemini
+        transcript: audioAnalysis.transcript || '',
+        analysis: {
+            risk_level: audioAnalysis.risk_level || 'no',
+            counseling_needed: audioAnalysis.counseling_needed || 'no',
+            immediate_intervention: audioAnalysis.immediate_intervention || 'no',
+            emotional_state: audioAnalysis.emotional_state || 'Unknown',
+            concerning_phrases: audioAnalysis.concerning_phrases || [],
+            assessment_summary: audioAnalysis.assessment_summary || 'No assessment available',
+            confidence_level: audioAnalysis.confidence_level || 'medium',
+            language_used: audioAnalysis.language_used || 'unknown',
+            support_recommendations: audioAnalysis.support_recommendations || 'Continue supportive engagement'
+        },
+        
+        // Legacy fields for backwards compatibility
+        tendency: audioAnalysis.risk_level || 'no',
+        needsCounselling: audioAnalysis.counseling_needed || 'no',
+        review: generateReviewSummary(audioAnalysis.risk_level || 'no', legacyScore),
+        score: legacyScore,
+        detectedTerms: [], // Not applicable for audio analysis
+        geminiAnalysis: audioAnalysis,
+        immediateIntervention: audioAnalysis.immediate_intervention === 'yes',
+        
+        // Metadata
+        processingTime: Date.now() - startTime,
+        source: 'audio_gemini_analysis',
+        recordingUrl: freshRecordingUrl, // Fresh URL from Ultravox API
+        callId: callId
+    };
+    
+    // Cache the result
+    setCachedAnalysis(cacheKey, result);
+    
+    console.log(`🎯 Audio analysis completed in ${result.processingTime}ms - Risk: ${result.tendency}, Transcript: ${result.transcript.length} chars`);
+    return result;
+}
+
+/**
+ * Legacy function maintained for backwards compatibility - now redirects to audio analysis if transcript is a URL
+ */
+export async function classifyRiskAndCounselling(transcriptOrUrl, callId = null) {
+    // Check if input looks like a URL (recording URL)
+    if (typeof transcriptOrUrl === 'string' && (transcriptOrUrl.startsWith('http') || transcriptOrUrl.startsWith('https'))) {
+        console.log('🔄 Redirecting to audio analysis for URL input');
+        return await analyzeAudioRecording(transcriptOrUrl, callId);
+    }
+    
+    // Original text-based analysis (legacy support)
     const startTime = Date.now();
     
     // Input validation
-    if (!transcriptText || typeof transcriptText !== 'string') {
+    if (!transcriptOrUrl || typeof transcriptOrUrl !== 'string') {
         console.warn('⚠️ Invalid transcript text provided for analysis');
         return generateDefaultResponse();
     }
     
-    const text = transcriptText.toLowerCase().trim();
+    const text = transcriptOrUrl.toLowerCase().trim();
     
     // Check cache first
     const cacheKey = `analysis_${Buffer.from(text.substring(0, 200)).toString('base64')}`;
@@ -152,7 +260,7 @@ export async function classifyRiskAndCounselling(transcriptText) {
     if (gemini && text.length > 50) {
         try {
             console.log('🤖 Starting Gemini analysis...');
-            geminiAnalysis = await performGeminiAnalysisWithRetry(transcriptText, 2);
+            geminiAnalysis = await performGeminiAnalysisWithRetry(transcriptOrUrl, 2);
             console.log('✅ Gemini analysis completed successfully');
         } catch (e) {
             console.warn('⚠️ Gemini analysis failed:', e.message);
@@ -207,6 +315,90 @@ function assessRiskLevel(score) {
 }
 
 /**
+ * Download audio file from URL
+ */
+async function downloadAudioFile(url) {
+    const https = await import('https');
+    
+    return new Promise((resolve, reject) => {
+        const request = https.request(url, (response) => {
+            if (response.statusCode !== 200) {
+                reject(new Error(`Failed to download audio: HTTP ${response.statusCode}`));
+                return;
+            }
+            
+            const chunks = [];
+            response.on('data', chunk => chunks.push(chunk));
+            response.on('end', () => {
+                const buffer = Buffer.concat(chunks);
+                console.log(`📥 Downloaded audio file: ${buffer.length} bytes`);
+                resolve(buffer);
+            });
+        });
+        
+        request.on('error', reject);
+        request.setTimeout(30000, () => {
+            request.destroy();
+            reject(new Error('Audio download timeout'));
+        });
+        
+        request.end();
+    });
+}
+
+/**
+ * Calculate legacy risk score from Gemini analysis for backwards compatibility
+ */
+function calculateLegacyRiskScore(analysis) {
+    if (!analysis || !analysis.risk_level) return 0;
+    
+    const riskLevelScores = {
+        'no': 0,
+        'low': 1,
+        'medium': 3,
+        'high': 6,
+        'severe': 10
+    };
+    
+    let score = riskLevelScores[analysis.risk_level] || 0;
+    
+    // Add points for concerning phrases
+    if (analysis.concerning_phrases && analysis.concerning_phrases.length > 0) {
+        score += analysis.concerning_phrases.length;
+    }
+    
+    // Add points for immediate intervention
+    if (analysis.immediate_intervention === 'yes') {
+        score += 5;
+    }
+    
+    return score;
+}
+
+/**
+ * Validate and sanitize Gemini audio response
+ */
+function validateGeminiAudioResponse(response) {
+    const validRiskLevels = ['no', 'low', 'medium', 'high', 'severe'];
+    const validCounselingLevels = ['no', 'advised', 'yes'];
+    const validConfidenceLevels = ['low', 'medium', 'high'];
+    
+    return {
+        transcript: String(response.transcript || '').substring(0, 10000), // Limit transcript length
+        risk_level: validRiskLevels.includes(response.risk_level) ? response.risk_level : 'no',
+        counseling_needed: validCounselingLevels.includes(response.counseling_needed) ? response.counseling_needed : 'no',
+        immediate_intervention: response.immediate_intervention === 'yes' ? 'yes' : 'no',
+        emotional_state: String(response.emotional_state || 'Unknown emotional state').substring(0, 300),
+        concerning_phrases: Array.isArray(response.concerning_phrases) ? 
+            response.concerning_phrases.slice(0, 10).map(p => String(p).substring(0, 200)) : [],
+        assessment_summary: String(response.assessment_summary || 'No assessment available').substring(0, 1000),
+        confidence_level: validConfidenceLevels.includes(response.confidence_level) ? response.confidence_level : 'medium',
+        language_used: String(response.language_used || 'unknown').toLowerCase(),
+        support_recommendations: String(response.support_recommendations || 'Continue supportive listening').substring(0, 500)
+    };
+}
+
+/**
  * Generate default response for invalid input
  */
 function generateDefaultResponse() {
@@ -220,6 +412,53 @@ function generateDefaultResponse() {
         immediateIntervention: false,
         processingTime: 0
     };
+}
+
+/**
+ * Generate default response for audio analysis failures
+ */
+function generateDefaultAudioResponse() {
+    return {
+        transcript: '',
+        analysis: {
+            risk_level: 'unknown',
+            counseling_needed: 'no',
+            immediate_intervention: 'no',
+            emotional_state: 'Unable to determine',
+            concerning_phrases: [],
+            assessment_summary: 'Unable to analyze audio recording - analysis failed',
+            confidence_level: 'low',
+            language_used: 'unknown',
+            support_recommendations: 'Manual review recommended'
+        },
+        tendency: 'unknown',
+        needsCounselling: 'no',
+        review: 'Unable to analyze audio recording - invalid URL or analysis failed',
+        score: 0,
+        detectedTerms: [],
+        geminiAnalysis: null,
+        immediateIntervention: false,
+        processingTime: 0,
+        source: 'audio_analysis_failed'
+    };
+}
+
+/**
+ * NEW: Perform Gemini AI audio analysis with retry logic
+ */
+async function performGeminiAudioAnalysisWithRetry(recordingUrl, callId, maxRetries = 2) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await performGeminiAudioAnalysis(recordingUrl, callId, attempt === maxRetries);
+        } catch (error) {
+            console.warn(`🎵 Gemini audio analysis attempt ${attempt} failed:`, error.message);
+            if (attempt === maxRetries) {
+                throw error;
+            }
+            // Wait before retry (exponential backoff)
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        }
+    }
 }
 
 /**
@@ -237,6 +476,106 @@ async function performGeminiAnalysisWithRetry(transcriptText, maxRetries = 2) {
             // Wait before retry (exponential backoff)
             await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
         }
+    }
+}
+
+/**
+ * NEW: Perform Gemini AI analysis on audio recording with comprehensive output
+ */
+async function performGeminiAudioAnalysis(recordingUrl, callId, isLastAttempt = false) {
+    console.log(`🎵 Processing audio analysis for call ${callId} with URL: ${recordingUrl.substring(0, 80)}...`);
+    
+    // For now, we'll download the audio and send it to Gemini
+    // Note: This is a simplified approach. In production, you might want to:
+    // 1. Stream the audio directly
+    // 2. Use specialized audio processing
+    // 3. Handle large files differently
+    
+    try {
+        // Download the audio file
+        console.log('📥 Downloading audio file...');
+        const audioBuffer = await downloadAudioFile(recordingUrl);
+        
+        // Get Gemini model with vision/audio capabilities
+        const model = gemini.getGenerativeModel({ model: "gemini-2.5-pro" });
+        
+        // Create the comprehensive prompt for audio analysis
+        const prompt = `Please analyze this mental health support call recording and provide a comprehensive analysis. 
+
+IMPORTANT: Respond ONLY with valid JSON in this exact format:
+
+{
+  "transcript": "full conversation transcript with speaker labels (User: / Agent:)",
+  "risk_level": "no|low|medium|high|severe",
+  "counseling_needed": "no|advised|yes",
+  "immediate_intervention": "yes|no",
+  "emotional_state": "detailed emotional state of the caller",
+  "concerning_phrases": ["list of concerning phrases or statements"],
+  "assessment_summary": "comprehensive assessment paragraph including emotional state, risk factors, and recommendations", 
+  "confidence_level": "low|medium|high",
+  "language_used": "hindi|english|hinglish|other",
+  "support_recommendations": "specific actionable recommendations for support"
+}
+
+Please listen carefully to the entire conversation and provide:
+1. A complete transcript with speaker identification
+2. Mental health risk assessment 
+3. Emotional state analysis
+4. Any concerning language or indicators
+5. Professional recommendations for support
+
+Focus on identifying signs of distress, suicidal ideation, depression, anxiety, or other mental health concerns.`;
+
+        console.log(`🤖 Sending audio to Gemini for analysis... (File size: ${(audioBuffer.length / 1024 / 1024).toFixed(2)}MB)`);
+        console.log('⏳ This may take 2-5 minutes for large audio files. Please wait...');
+        
+        // Create progress indicator for long-running operations
+        const progressInterval = setInterval(() => {
+            console.log('🔄 Still processing audio with Gemini AI...');
+        }, 30000); // Log every 30 seconds
+        
+        // Create a promise that will timeout after 5 minutes (audio processing can take a long time for large files)
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => {
+                clearInterval(progressInterval);
+                reject(new Error('Gemini audio analysis timeout after 5 minutes'));
+            }, 300000); // 5 minutes
+        });
+        
+        const analysisPromise = model.generateContent([
+            prompt,
+            {
+                inlineData: {
+                    data: audioBuffer.toString('base64'),
+                    mimeType: 'audio/wav'
+                }
+            }
+        ]).then(result => {
+            clearInterval(progressInterval); // Clear progress indicator on success
+            
+            const responseText = result.response.text().trim()
+                .replace(/^```json\n?/, '')
+                .replace(/\n?```$/, '')
+                .replace(/^```\n?/, '')
+                .replace(/\n?```$/, '');
+            
+            console.log('📋 Received Gemini response, parsing JSON...');
+            
+            try {
+                const parsed = JSON.parse(responseText);
+                return validateGeminiAudioResponse(parsed);
+            } catch (parseError) {
+                console.warn('🤖 Failed to parse Gemini audio response:', responseText.substring(0, 300));
+                console.warn('Parse error:', parseError.message);
+                throw new Error(`Invalid JSON response from Gemini: ${parseError.message}`);
+            }
+        });
+        
+        return Promise.race([analysisPromise, timeoutPromise]);
+        
+    } catch (error) {
+        console.error('❌ Audio analysis failed:', error.message);
+        throw new Error(`Audio analysis failed: ${error.message}`);
     }
 }
 

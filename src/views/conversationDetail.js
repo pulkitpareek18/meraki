@@ -153,6 +153,7 @@ export function generateConversationDetailHTML(conversation) {
         ` : ''}
         ${c.geminiAnalysis.support_recommendations ? `<p><strong>Support Recommendations:</strong> ${c.geminiAnalysis.support_recommendations}</p>` : ''}
         ${c.geminiAnalysis.confidence_level ? `<p><strong>Confidence Level:</strong> ${c.geminiAnalysis.confidence_level}</p>` : ''}
+        ${c.processingMethod ? `<p style="font-size:12px;color:#6b7280;margin-top:10px;"><strong>Analysis Method:</strong> ${c.processingMethod.replace(/_/g, ' ')}</p>` : ''}
     </div>` : '<h3>🤖 AI Analysis</h3><p style="color:#6b7280;">No AI analysis available</p>';
 
     const detectedTermsSection = c.detectedTerms && c.detectedTerms.length > 0 ? `
@@ -359,20 +360,28 @@ export function generateConversationDetailHTML(conversation) {
             </div>
             
             <div class="info-section">
-                <h3>🔧 Raw Data</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3>🔧 Raw Data</h3>
+                    <button class="btn btn-secondary" onclick="fetchFreshRawData()" style="font-size:12px;" title="Fetch latest data directly from Ultravox API">
+                        🔄 Fetch Fresh Data from Ultravox
+                    </button>
+                </div>
+                
                 <details style="margin:20px 0;">
-                    <summary style="cursor:pointer;padding:10px;background:#f3f4f6;border-radius:4px;">Show Raw Data</summary>
-                    <pre style="white-space:pre-wrap;font-size:12px;background:#f9fafb;padding:15px;border-radius:8px;margin-top:10px;overflow:auto;">${JSON.stringify(c.raw || {}, null, 2).replace(/</g, '&lt;')}</pre>
+                    <summary style="cursor:pointer;padding:10px;background:#f3f4f6;border-radius:4px;">Show Stored Raw Data</summary>
+                    <div style="background:#fffbeb;padding:10px;border-radius:4px;margin:10px 0;border:1px solid #fbbf24;">
+                        <p style="margin:0;font-size:12px;color:#92400e;">⚠️ <strong>Note:</strong> This is stored data from our database, which may be outdated. Use "Fetch Fresh Data" button above to get the latest data from Ultravox API.</p>
+                    </div>
+                    <pre id="stored-raw-data" style="white-space:pre-wrap;font-size:12px;background:#f9fafb;padding:15px;border-radius:8px;margin-top:10px;overflow:auto;">${JSON.stringify(c.raw || {}, null, 2).replace(/</g, '&lt;')}</pre>
+                </details>
+                
+                <details id="fresh-raw-data-container" style="margin:20px 0;display:none;">
+                    <summary style="cursor:pointer;padding:10px;background:#ecfdf5;border-radius:4px;border:1px solid #bbf7d0;">Show Fresh Raw Data from Ultravox API</summary>
+                    <pre id="fresh-raw-data" style="white-space:pre-wrap;font-size:12px;background:#f0fdf4;padding:15px;border-radius:8px;margin-top:10px;overflow:auto;border:1px solid #bbf7d0;"></pre>
                 </details>
             </div>
             
-            <div class="info-section">
-                <h3>🔧 Raw Data</h3>
-                <details style="margin:20px 0;">
-                    <summary style="cursor:pointer;padding:10px;background:#f3f4f6;border-radius:4px;">Show Raw Data</summary>
-                    <pre style="white-space:pre-wrap;font-size:12px;background:#f9fafb;padding:15px;border-radius:8px;margin-top:10px;overflow:auto;">${JSON.stringify(c.raw || {}, null, 2).replace(/</g, '&lt;')}</pre>
-                </details>
-            </div>
+
         
         <div id="result" style="margin-top:20px;"></div>
         
@@ -493,6 +502,65 @@ export function generateConversationDetailHTML(conversation) {
                             <p style="color:#dc2626;margin:0;">❌ Error fetching recording: \` + error.message + \`</p>
                             <p style="color:#6b7280;font-size:12px;margin:5px 0 0 0;">
                                 Please check the console for more details or try again later.
+                            </p>
+                        </div>
+                    \`;
+                }
+            }
+
+            async function fetchFreshRawData() {
+                try {
+                    const callId = '${c.id}';
+                    const freshDataContainer = document.getElementById('fresh-raw-data-container');
+                    const freshDataPre = document.getElementById('fresh-raw-data');
+                    
+                    // Show loading state
+                    freshDataContainer.style.display = 'block';
+                    freshDataPre.innerHTML = \`
+                        <div style="color:#3b82f6;text-align:center;padding:20px;">
+                            🔄 Fetching fresh data from Ultravox API...
+                            <br><small style="color:#6b7280;">Call ID: \` + callId + \`</small>
+                        </div>
+                    \`;
+                    
+                    const response = await fetch('/api/conversations/' + callId + '/fresh-data', { 
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    const result = await response.json();
+                    
+                    if (result.ok && result.freshData) {
+                        // Success - show fresh data with timestamp
+                        const timestamp = new Date().toLocaleString();
+                        freshDataPre.innerHTML = \`
+                            <div style="background:#ecfdf5;padding:10px;border-radius:4px;margin-bottom:10px;border:1px solid #bbf7d0;">
+                                <p style="margin:0;font-size:12px;color:#059669;">✅ <strong>Fresh data fetched at:</strong> \` + timestamp + \`</p>
+                                <p style="margin:5px 0 0 0;font-size:11px;color:#6b7280;">This data comes directly from Ultravox API and represents the current state.</p>
+                            </div>
+                            <div style="font-family:monospace;white-space:pre-wrap;font-size:11px;line-height:1.4;">\` + JSON.stringify(result.freshData, null, 2).replace(/</g, '&lt;') + \`</div>
+                        \`;
+                        
+                        // Auto-scroll to fresh data
+                        freshDataContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } else {
+                        // Error state
+                        const errorMessage = result.error || 'Unable to fetch fresh data';
+                        freshDataPre.innerHTML = \`
+                            <div style="background:#fef2f2;padding:15px;border-radius:4px;border:1px solid #fecaca;text-align:center;">
+                                <p style="color:#dc2626;margin:0;">❌ \` + errorMessage + \`</p>
+                                <p style="color:#6b7280;font-size:12px;margin:5px 0 0 0;">
+                                    The call may not exist in Ultravox or there may be an API issue.
+                                </p>
+                            </div>
+                        \`;
+                    }
+                } catch (error) {
+                    const freshDataPre = document.getElementById('fresh-raw-data');
+                    freshDataPre.innerHTML = \`
+                        <div style="background:#fef2f2;padding:15px;border-radius:4px;border:1px solid #fecaca;text-align:center;">
+                            <p style="color:#dc2626;margin:0;">❌ Network error: \` + error.message + \`</p>
+                            <p style="color:#6b7280;font-size:12px;margin:5px 0 0 0;">
+                                Please check your connection and try again.
                             </p>
                         </div>
                     \`;

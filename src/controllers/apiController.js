@@ -248,3 +248,62 @@ export const getCallRecording = asyncHandler(async (req, res) => {
         throw error; // Re-throw for asyncHandler to catch
     }
 });
+
+/**
+ * Get fresh call data directly from Ultravox API
+ */
+export const getFreshCallData = asyncHandler(async (req, res) => {
+    const { id: conversationId } = req.params;
+    validateRequired({ conversationId }, ['conversationId']);
+    
+    console.log(`🔄 Fetching fresh data from Ultravox for conversation: ${conversationId}`);
+    
+    // First, get the conversation to extract the correct call ID
+    const { getConversationById } = await import('../services/conversation.js');
+    const conversation = await getConversationById(conversationId);
+    
+    if (!conversation) {
+        return sendError(res, 404, 'Conversation not found');
+    }
+    
+    // Determine the Ultravox call ID to use
+    let ultravoxCallId = conversationId;
+    
+    // Check if there's a specific Ultravox call ID in the raw data
+    if (conversation.raw?.uvxResponse?.callId) {
+        ultravoxCallId = conversation.raw.uvxResponse.callId;
+        console.log(`🔄 Using Ultravox call ID from raw data: ${ultravoxCallId}`);
+    }
+    
+    const { getUltravoxCall } = await import('../services/ultravox.js');
+    
+    try {
+        const freshData = await getUltravoxCall(ultravoxCallId);
+        
+        if (freshData) {
+            console.log(`✅ Fresh data retrieved from Ultravox for call: ${ultravoxCallId}`);
+            
+            return sendResponse(res, 200, { 
+                freshData,
+                callId: ultravoxCallId,
+                conversationId: conversationId,
+                fetchedAt: new Date().toISOString()
+            }, 'Fresh data retrieved from Ultravox API successfully');
+        } else {
+            return sendError(res, 404, `No data found for call ${ultravoxCallId} in Ultravox`, {
+                callId: ultravoxCallId,
+                conversationId: conversationId
+            });
+        }
+    } catch (error) {
+        console.error(`❌ Error fetching fresh data for call ${ultravoxCallId}:`, error.message);
+        
+        if (error.message.includes('404') || error.message.includes('not found')) {
+            return sendError(res, 404, `Call ${ultravoxCallId} not found in Ultravox API`, {
+                callId: ultravoxCallId,
+                conversationId: conversationId
+            });
+        }
+        throw error; // Re-throw for asyncHandler to catch
+    }
+});

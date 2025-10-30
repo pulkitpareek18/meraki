@@ -7,9 +7,9 @@ import {
 } from '../database/connection.js';
 import { 
     getUltravoxCall, 
-    getUltravoxTranscriptFromMessages 
+    getUltravoxCallRecording
 } from './ultravox.js';
-import { classifyRiskAndCounselling } from './riskAnalysis.js';
+import { analyzeAudioRecording, classifyRiskAndCounselling } from './riskAnalysis.js';
 
 /**
  * Create a new conversation record
@@ -72,42 +72,60 @@ export async function processCallCompletion(callId, isUltravoxCallId = false) {
         throw new Error(`Conversation not found: ${callId}`);
     }
 
-    // Fetch transcript and call details
-    const [transcriptResult, callDetailsResult] = await Promise.allSettled([
-        getUltravoxTranscriptFromMessages(ultravoxCallId),
-        getUltravoxCall(ultravoxCallId),
-    ]);
+    // NEW APPROACH: Audio analysis with fresh recording URL
+    console.log(`🎵 Starting audio analysis with fresh recording URL for ${ultravoxCallId}...`);
     
-    const transcript = transcriptResult.status === 'fulfilled' ? transcriptResult.value : '';
-    const callDetails = callDetailsResult.status === 'fulfilled' ? callDetailsResult.value : null;
-
-    if (transcriptResult.status === 'rejected') {
-        console.warn(`Failed to fetch transcript for ${callId}:`, transcriptResult.reason.message);
-    }
-    if (callDetailsResult.status === 'rejected') {
-        console.warn(`Failed to fetch call details for ${callId}:`, callDetailsResult.reason.message);
-    }
-
-    // Analyze the transcript
-    const analysis = await classifyRiskAndCounselling(transcript || 'No transcript available');
+    let analysis;
+    let transcript = '';
     
-    // Update the conversation record
+    try {
+        // Use audio analysis - it will fetch fresh recording URL from Ultravox API internally
+        analysis = await analyzeAudioRecording(ultravoxCallId);
+        transcript = analysis.transcript || '';
+        console.log(`✅ Gemini audio analysis complete - transcript: ${transcript.length} chars`);
+    } catch (audioError) {
+        console.warn(`⚠️ Audio analysis failed, falling back to basic analysis:`, audioError.message);
+        // Fallback to basic analysis with empty transcript
+        analysis = await classifyRiskAndCounselling('Recording analysis failed - manual review needed');
+    }
+    
+    // Still get call details for metadata
+    const callDetailsResult = await Promise.allSettled([getUltravoxCall(ultravoxCallId)]);
+    const callDetails = callDetailsResult[0].status === 'fulfilled' ? callDetailsResult[0].value : null;
+    if (callDetailsResult[0].status === 'rejected') {
+        console.warn(`Failed to fetch call details for ${callId}:`, callDetailsResult[0].reason.message);
+    }
+    
+    // Update the conversation record with comprehensive analysis
     const updatedRecord = {
         ...existing,
         updatedAt: new Date().toISOString(),
         transcript,
-        recordingUrl: callDetails?.recordingUrl || existing.recordingUrl || '',
-        summary: analysis.review,
+        recordingUrl: analysis.recordingUrl || (callDetails?.recordingUrl || existing.recordingUrl || ''),
+        
+        // Enhanced analysis fields
+        summary: analysis.review || analysis.analysis?.assessment_summary || 'No analysis available',
         tendency: analysis.tendency,
         needsCounselling: analysis.needsCounselling,
         score: analysis.score,
-        detectedTerms: analysis.detectedTerms,
+        detectedTerms: analysis.detectedTerms || [],
         immediateIntervention: analysis.immediateIntervention,
-        geminiAnalysis: analysis.geminiAnalysis,
-        status: 'completed',
+        
+        // Store complete Gemini analysis
+        geminiAnalysis: analysis.geminiAnalysis || analysis.analysis,
+        analysis: analysis.analysis, // New comprehensive analysis object
+        
+        // Status and metadata
+        status: transcript ? 'completed' : (recordingResult.status === 'fulfilled' ? 'analysis_only' : 'no_data'),
+        processingMethod: analysis.source || 'audio_gemini_analysis',
         raw: { 
             ...(existing.raw || {}), 
-            finalDetails: callDetails 
+            finalDetails: callDetails,
+            analysisMetadata: {
+                processingTime: analysis.processingTime,
+                timestamp: new Date().toISOString(),
+                method: 'gemini_audio_analysis'
+            }
         }
     };
     
@@ -128,30 +146,53 @@ export async function refreshConversation(callId) {
         throw new Error('Conversation not found');
     }
 
-    const [transcriptResult, callDetailsResult] = await Promise.allSettled([
-        getUltravoxTranscriptFromMessages(callId),
-        getUltravoxCall(callId),
-    ]);
+    // NEW APPROACH: Re-analyze using fresh recording URL from Ultravox
+    console.log(`🔄 Re-analyzing conversation ${callId} using fresh audio recording...`);
+    
+    let analysis;
+    let transcript = '';
+    let transcriptUpdated = false;
 
-    const transcript = transcriptResult.status === 'fulfilled' ? transcriptResult.value : existing.transcript || '';
-    const callDetails = callDetailsResult.status === 'fulfilled' ? callDetailsResult.value : null;
-    const transcriptUpdated = transcriptResult.status === 'fulfilled' && !!transcriptResult.value;
+    try {
+        // Use audio analysis with fresh recording URL from Ultravox API
+        analysis = await analyzeAudioRecording(callId);
+        transcript = analysis.transcript || '';
+        transcriptUpdated = true;
+        console.log(`✅ Re-analysis complete - transcript: ${transcript.length} chars`);
+    } catch (audioError) {
+        console.warn(`⚠️ Audio re-analysis failed, keeping existing data:`, audioError.message);
+        // Fallback: re-analyze existing transcript
+        transcript = existing.transcript || '';
+        analysis = await classifyRiskAndCounselling(transcript || 'Re-analysis failed - using existing data');
+    }
 
-    const analysis = await classifyRiskAndCounselling(transcript || 'No transcript available');
+    // Still get call details for metadata
+    const callDetailsResult = await Promise.allSettled([getUltravoxCall(callId)]);
+    const callDetails = callDetailsResult[0].status === 'fulfilled' ? callDetailsResult[0].value : null;
     
     const updatedRecord = {
         ...existing,
         updatedAt: new Date().toISOString(),
         transcript,
-        summary: analysis.review,
+        
+        // Enhanced analysis fields
+        summary: analysis.review || analysis.analysis?.assessment_summary || 'No analysis available',
         tendency: analysis.tendency,
         needsCounselling: analysis.needsCounselling,
         score: analysis.score,
-        detectedTerms: analysis.detectedTerms,
+        detectedTerms: analysis.detectedTerms || [],
         immediateIntervention: analysis.immediateIntervention,
-        geminiAnalysis: analysis.geminiAnalysis,
-        recordingUrl: callDetails?.recordingUrl || existing.recordingUrl || '',
-        status: transcript ? 'completed' : 'no_transcript'
+        
+        // Store complete analysis
+        geminiAnalysis: analysis.geminiAnalysis || analysis.analysis,
+        analysis: analysis.analysis,
+        
+        // Update recording URL with fresh one from analysis
+        recordingUrl: analysis.recordingUrl || (callDetails?.recordingUrl || existing.recordingUrl || ''),
+        
+        // Update status and processing method
+        status: transcript ? 'completed' : (analysis.recordingUrl ? 'analysis_only' : 'no_data'),
+        processingMethod: analysis.source || 'audio_gemini_refresh'
     };
     
     await upsertConversation(updatedRecord);
@@ -167,35 +208,65 @@ export async function refreshConversation(callId) {
  * Regenerate AI analysis for a conversation
  */
 export async function regenerateAnalysis(callId) {
-    console.log(`🤖 Regenerating AI analysis for conversation: ${callId}`);
+    console.log(`🤖 Regenerating analysis using audio recording for conversation: ${callId}`);
     
     const existing = await getConversationById(callId);
     if (!existing) {
         throw new Error('Conversation not found');
     }
 
-    if (!existing.transcript || existing.transcript.trim().length === 0) {
-        throw new Error('Cannot regenerate analysis without a transcript');
+    // NEW APPROACH: Use audio analysis with fresh recording URL
+    let analysis;
+    let transcript = existing.transcript || '';
+    
+    try {
+        console.log('🎵 Using fresh recording URL for regeneration...');
+        // Use audio analysis - it fetches fresh recording URL from Ultravox API internally
+        analysis = await analyzeAudioRecording(callId);
+        transcript = analysis.transcript || existing.transcript || '';
+        console.log(`✅ Audio analysis regeneration complete - transcript: ${transcript.length} chars`);
+    } catch (audioError) {
+        console.warn(`⚠️ Audio analysis failed, falling back to existing transcript:`, audioError.message);
+        if (!existing.transcript || existing.transcript.trim().length === 0) {
+            throw new Error('Cannot regenerate analysis without a recording or transcript');
+        }
+        // Fallback to text analysis with existing transcript
+        analysis = await classifyRiskAndCounselling(existing.transcript);
     }
-
-    // Re-run the full analysis
-    const analysis = await classifyRiskAndCounselling(existing.transcript);
 
     const updatedRecord = {
         ...existing,
         updatedAt: new Date().toISOString(),
-        summary: analysis.review,
+        transcript,
+        
+        // Enhanced analysis fields
+        summary: analysis.review || analysis.analysis?.assessment_summary || 'Analysis regenerated',
         tendency: analysis.tendency,
         needsCounselling: analysis.needsCounselling,
         score: analysis.score,
-        detectedTerms: analysis.detectedTerms,
+        detectedTerms: analysis.detectedTerms || [],
         immediateIntervention: analysis.immediateIntervention,
-        geminiAnalysis: analysis.geminiAnalysis,
+        
+        // Store complete analysis
+        geminiAnalysis: analysis.geminiAnalysis || analysis.analysis,
+        analysis: analysis.analysis,
+        
+        // Update recording URL with fresh one from analysis
+        recordingUrl: analysis.recordingUrl || existing.recordingUrl || '',
+        processingMethod: analysis.source || 'regeneration_audio_gemini',
+        raw: {
+            ...(existing.raw || {}),
+            regenerationMetadata: {
+                timestamp: new Date().toISOString(),
+                processingTime: analysis.processingTime || 0,
+                method: analysis.recordingUrl ? 'audio_regeneration' : 'text_fallback'
+            }
+        }
     };
     
     await upsertConversation(updatedRecord);
     
-    console.log(`✅ AI Analysis regeneration complete for ${callId}`);
+    console.log(`✅ Analysis regeneration complete for ${callId}`);
     return updatedRecord;
 }
 
@@ -245,8 +316,8 @@ export async function batchRefreshConversations() {
 export async function importConversationsFromUltravox(limit = 20) {
     console.log(`📥 Importing ${limit} conversations from Ultravox...`);
     
-    const { listUltravoxCalls, getUltravoxCall, getUltravoxTranscriptFromMessages } = await import('./ultravox.js');
-    const { classifyRiskAndCounselling } = await import('./riskAnalysis.js');
+    const { listUltravoxCalls, getUltravoxCall, getUltravoxCallRecording } = await import('./ultravox.js');
+    const { analyzeAudioRecording, classifyRiskAndCounselling } = await import('./riskAnalysis.js');
     
     const callsResponse = await listUltravoxCalls(limit);
     const calls = callsResponse.results || [];
@@ -295,15 +366,23 @@ export async function importConversationsFromUltravox(limit = 20) {
             };
         }
         
-        const [transcriptResult, callDetailsResult] = await Promise.allSettled([
-            getUltravoxTranscriptFromMessages(callId),
-            getUltravoxCall(callId),
-        ]);
+        // NEW APPROACH: Use audio analysis with fresh recording URL
+        let transcript = '';
+        let analysis;
 
-        const transcript = transcriptResult.status === 'fulfilled' ? transcriptResult.value : '';
-        const callDetails = callDetailsResult.status === 'fulfilled' ? callDetailsResult.value : null;
+        try {
+            // Use audio analysis for imported calls - it fetches fresh recording URL internally
+            analysis = await analyzeAudioRecording(callId);
+            transcript = analysis.transcript || '';
+        } catch (audioError) {
+            console.warn(`⚠️ Audio analysis failed for import ${callId}:`, audioError.message);
+            // Fallback for calls without recordings or analysis failures
+            analysis = await classifyRiskAndCounselling('Imported call - audio analysis failed');
+        }
 
-        const analysis = await classifyRiskAndCounselling(transcript || 'Imported call - no transcript');
+        // Still get call details for metadata
+        const callDetailsResult = await Promise.allSettled([getUltravoxCall(callId)]);
+        const callDetails = callDetailsResult[0].status === 'fulfilled' ? callDetailsResult[0].value : null;
         const existing = await getConversationById(callId);
         
         const record = {
@@ -313,8 +392,10 @@ export async function importConversationsFromUltravox(limit = 20) {
             createdAt: call.createdAt || call.created_at || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             transcript,
-            recordingUrl: callDetails?.recordingUrl || '',
-            summary: analysis.review,
+            recordingUrl: analysis.recordingUrl || (callDetails?.recordingUrl || ''),
+            
+            // Enhanced analysis fields
+            summary: analysis.review || analysis.analysis?.assessment_summary || 'Imported call - analysis pending',
             tendency: analysis.tendency,
             needsCounselling: analysis.needsCounselling,
             score: analysis.score,
