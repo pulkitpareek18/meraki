@@ -164,3 +164,87 @@ export const cleanupInvalidCalls = asyncHandler(async (req, res) => {
     console.log(`🧹 Validation complete: ${summary.valid} valid, ${summary.invalid} invalid calls`);
     return sendResponse(res, 200, { results, summary }, `Validation completed: ${summary.valid} valid calls, ${summary.invalid} invalid calls found`);
 });
+
+/**
+ * Get call recording from Ultravox
+ */
+export const getCallRecording = asyncHandler(async (req, res) => {
+    const { id: conversationId } = req.params;
+    validateRequired({ conversationId }, ['conversationId']);
+    
+    console.log(`🎵 Fetching recording for conversation: ${conversationId}`);
+    
+    // First, get the conversation to extract the correct call ID
+    const { getConversationById } = await import('../services/conversation.js');
+    const conversation = await getConversationById(conversationId);
+    
+    if (!conversation) {
+        return sendError(res, 404, 'Conversation not found');
+    }
+    
+    // Determine the Ultravox call ID to use
+    let ultravoxCallId = conversationId;
+    
+    // Check if there's a specific Ultravox call ID in the raw data
+    if (conversation.raw?.uvxResponse?.callId) {
+        ultravoxCallId = conversation.raw.uvxResponse.callId;
+        console.log(`🎵 Using Ultravox call ID from raw data: ${ultravoxCallId}`);
+    }
+    
+    const { getUltravoxCallRecording } = await import('../services/ultravox.js');
+    
+    try {
+        const recording = await getUltravoxCallRecording(ultravoxCallId);
+        let recordingUrl = null;
+        
+        // Extract recording URL from response
+        if (typeof recording === 'string' && (recording.startsWith('http') || recording.startsWith('https'))) {
+            recordingUrl = recording;
+        } else if (recording && typeof recording === 'object') {
+            recordingUrl = recording.recordingUrl || recording.location || recording.url;
+        }
+        
+        // If we successfully got a recording URL, store it in the conversation
+        if (recordingUrl) {
+            console.log(`✅ Recording URL retrieved: ${recordingUrl.substring(0, 100)}...`);
+            
+            // Import updateConversation function
+            const { updateConversation } = await import('../services/conversation.js');
+            
+            try {
+                // Update the conversation with the recording URL
+                await updateConversation(conversationId, { recordingUrl });
+                console.log(`💾 Recording URL stored in conversation: ${conversationId}`);
+            } catch (updateError) {
+                console.warn(`⚠️ Failed to store recording URL in conversation: ${updateError.message}`);
+                // Continue anyway - we still want to return the recording URL
+            }
+            
+            return sendResponse(res, 200, { 
+                recordingUrl,
+                callId: ultravoxCallId,
+                conversationId: conversationId,
+                stored: true 
+            }, 'Recording URL retrieved and stored successfully');
+        }
+        
+        // If we get here, the response format is unexpected - return for debugging
+        console.warn(`⚠️ Unexpected recording response format:`, recording);
+        return sendResponse(res, 200, { 
+            recording, 
+            callId: ultravoxCallId,
+            conversationId: conversationId,
+            warning: 'Unexpected response format - please check the recording field' 
+        }, 'Recording data retrieved but format is unexpected');
+    } catch (error) {
+        console.error(`❌ Error fetching recording for call ${ultravoxCallId}:`, error.message);
+        
+        if (error.message.includes('404')) {
+            return sendError(res, 404, `Recording not found for call ${ultravoxCallId}`, {
+                callId: ultravoxCallId,
+                conversationId: conversationId
+            });
+        }
+        throw error; // Re-throw for asyncHandler to catch
+    }
+});

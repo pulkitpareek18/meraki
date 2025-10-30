@@ -7,7 +7,8 @@ import {
     regenerateConversationAnalysis,
     batchRefreshAllConversations,
     importFromUltravox,
-    cleanupInvalidCalls
+    cleanupInvalidCalls,
+    getCallRecording
 } from '../controllers/apiController.js';
 import { 
     checkServicesHealth, 
@@ -29,6 +30,7 @@ router.post('/ultravox/events', handleUltravoxEvents);
 router.get('/api/conversations', getAllConversations);
 router.post('/api/conversations/:id/refresh', refreshSpecificConversation);
 router.post('/api/conversations/:id/regenerate-analysis', regenerateConversationAnalysis);
+router.get('/api/conversations/:id/recording', getCallRecording);
 router.post('/api/conversations/refresh-all', batchRefreshAllConversations);
 router.post('/api/conversations/import-from-ultravox', importFromUltravox);
 router.post('/api/conversations/cleanup-invalid', cleanupInvalidCalls);

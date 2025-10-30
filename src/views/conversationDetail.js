@@ -311,7 +311,7 @@ export function generateConversationDetailHTML(conversation) {
                 </div>
             </div>
             
-            <div class="info-section">
+                        <div class="info-section">
                 <div class="info-card ai">
                     <h3>📋 System Analysis Summary</h3>
                     <div style="background:#fffbeb;padding:15px;border-radius:8px;border-left:4px solid #f59e0b;margin-top:15px;">
@@ -319,32 +319,60 @@ export function generateConversationDetailHTML(conversation) {
                     </div>
                 </div>
             </div>
-        
-            ${c.recordingUrl ? `
+            
             <div class="audio-section">
-                <h3>🎵 Call Recording</h3>
-                <div style="margin-bottom:15px;">
-                    <audio controls preload="metadata">
-                        <source src="${c.recordingUrl}" type="audio/mpeg">
-                        <source src="${c.recordingUrl}" type="audio/wav">
-                        <source src="${c.recordingUrl}" type="audio/ogg">
-                        Your browser does not support the audio element.
-                    </audio>
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3>🎵 Call Recording</h3>
+                    <button class="btn btn-secondary" onclick="fetchCallRecording()" style="font-size:12px;" title="Fetch/Update recording from Ultravox API">
+                        🔄 ${c.recordingUrl ? 'Update' : 'Fetch'} from Ultravox
+                    </button>
                 </div>
+                
+                <div id="recording-container">
+                    ${c.recordingUrl ? `
+                        <div style="margin-bottom:15px;">
+                            <audio controls preload="metadata" style="width:100%;max-width:500px;">
+                                <source src="${c.recordingUrl}" type="audio/mpeg">
+                                <source src="${c.recordingUrl}" type="audio/wav">
+                                <source src="${c.recordingUrl}" type="audio/ogg">
+                                Your browser does not support the audio element.
+                            </audio>
+                        </div>
+                        <p style="margin:5px 0;font-size:12px;color:#6b7280;">
+                            <strong>Recording URL:</strong> <a href="${c.recordingUrl}" target="_blank" style="color:#059669;">${c.recordingUrl}</a>
+                        </p>
+                    ` : `
+                        <div id="no-recording" style="background:#fef2f2;padding:15px;border-radius:8px;border:1px solid #fecaca;margin-top:15px;text-align:center;">
+                            <p style="color:#dc2626;margin:0;">❌ No recording URL available in stored data</p>
+                            <p style="color:#6b7280;font-size:12px;margin:5px 0 0 0;">
+                                Available Call IDs:
+                                ${c.raw?.uvxResponse?.callId ? `<br/>• Ultravox Call ID: <strong>${c.raw.uvxResponse.callId}</strong>` : ''}
+                                <br/>• Stored Call ID: <strong>${c.id}</strong>
+                            </p>
+                        </div>
+                    `}
+                </div>
+                
                 <p style="margin:5px 0;font-size:12px;color:#6b7280;">
-                    <strong>Recording URL:</strong> <a href="${c.recordingUrl}" target="_blank" style="color:#059669;">${c.recordingUrl}</a>
-                </p>
-                <p style="margin:5px 0;font-size:12px;color:#6b7280;">
-                    💡 <em>Tip: Right-click the audio player and select "Download" to save locally.</em>
+                    💡 <em>Tip: Recording URLs are automatically saved when fetched. Click "${c.recordingUrl ? 'Update' : 'Fetch'} from Ultravox" to ${c.recordingUrl ? 'refresh with the latest recording' : 'get the recording from Ultravox API'}</em>
                 </p>
             </div>
-            ` : ''}
-        
-        <h3>🔧 Raw Data</h3>
-        <details style="margin:20px 0;">
-            <summary style="cursor:pointer;padding:10px;background:#f3f4f6;border-radius:4px;">Show Raw Data</summary>
-            <pre style="white-space:pre-wrap;font-size:12px;background:#f9fafb;padding:15px;border-radius:8px;margin-top:10px;overflow:auto;">${JSON.stringify(c.raw || {}, null, 2).replace(/</g, '&lt;')}</pre>
-        </details>
+            
+            <div class="info-section">
+                <h3>🔧 Raw Data</h3>
+                <details style="margin:20px 0;">
+                    <summary style="cursor:pointer;padding:10px;background:#f3f4f6;border-radius:4px;">Show Raw Data</summary>
+                    <pre style="white-space:pre-wrap;font-size:12px;background:#f9fafb;padding:15px;border-radius:8px;margin-top:10px;overflow:auto;">${JSON.stringify(c.raw || {}, null, 2).replace(/</g, '&lt;')}</pre>
+                </details>
+            </div>
+            
+            <div class="info-section">
+                <h3>🔧 Raw Data</h3>
+                <details style="margin:20px 0;">
+                    <summary style="cursor:pointer;padding:10px;background:#f3f4f6;border-radius:4px;">Show Raw Data</summary>
+                    <pre style="white-space:pre-wrap;font-size:12px;background:#f9fafb;padding:15px;border-radius:8px;margin-top:10px;overflow:auto;">${JSON.stringify(c.raw || {}, null, 2).replace(/</g, '&lt;')}</pre>
+                </details>
+            </div>
         
         <div id="result" style="margin-top:20px;"></div>
         
@@ -404,6 +432,71 @@ export function generateConversationDetailHTML(conversation) {
                         button.textContent = 'Copy';
                     }, 2000);
                 });
+            }
+
+            async function fetchCallRecording() {
+                try {
+                    const recordingContainer = document.getElementById('recording-container');
+                    const callId = '${c.id}';
+                    
+                    // Show loading state
+                    recordingContainer.innerHTML = \`
+                        <div style="background:#f0f9ff;padding:15px;border-radius:8px;border:1px solid #bae6fd;text-align:center;">
+                            <p style="color:#3b82f6;margin:0;">🔄 Fetching recording from Ultravox API...</p>
+                            <p style="color:#6b7280;font-size:12px;margin:5px 0 0 0;">Call ID: \` + callId + \`</p>
+                        </div>
+                    \`;
+                    
+                    const response = await fetch('/api/conversations/' + callId + '/recording', { 
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    const result = await response.json();
+                    
+                    if (result.ok && result.recordingUrl) {
+                        // Success - show audio player
+                        const storedMessage = result.stored ? 
+                            '<p style="color:#059669;margin:0 0 5px 0;font-size:12px;">💾 Recording URL has been saved for future visits</p>' : '';
+                        
+                        recordingContainer.innerHTML = \`
+                            <div style="background:#f0fdf4;padding:15px;border-radius:8px;border:1px solid #bbf7d0;margin-bottom:15px;">
+                                <p style="color:#059669;margin:0 0 10px 0;font-weight:600;">✅ Recording fetched successfully from Ultravox!</p>
+                                \` + storedMessage + \`
+                            </div>
+                            <div style="margin-bottom:15px;">
+                                <audio controls preload="metadata" style="width:100%;max-width:500px;">
+                                    <source src="\` + result.recordingUrl + \`" type="audio/mpeg">
+                                    <source src="\` + result.recordingUrl + \`" type="audio/wav">
+                                    <source src="\` + result.recordingUrl + \`" type="audio/ogg">
+                                    Your browser does not support the audio element.
+                                </audio>
+                            </div>
+                            <p style="margin:5px 0;font-size:12px;color:#6b7280;">
+                                <strong>Recording URL:</strong> <a href="\` + result.recordingUrl + \`" target="_blank" style="color:#059669;">\` + result.recordingUrl.substring(0, 100) + (result.recordingUrl.length > 100 ? '...' : '') + \`</a>
+                            </p>
+                        \`;
+                    } else {
+                        // No recording found or error
+                        const errorMessage = result.error || 'Recording not available';
+                        recordingContainer.innerHTML = \`
+                            <div style="background:#fef2f2;padding:15px;border-radius:8px;border:1px solid #fecaca;text-align:center;">
+                                <p style="color:#dc2626;margin:0;">❌ \` + errorMessage + \`</p>
+                                <p style="color:#6b7280;font-size:12px;margin:5px 0 0 0;">
+                                    The recording may not be available yet or may have expired.
+                                </p>
+                            </div>
+                        \`;
+                    }
+                } catch (error) {
+                    document.getElementById('recording-container').innerHTML = \`
+                        <div style="background:#fef2f2;padding:15px;border-radius:8px;border:1px solid #fecaca;text-align:center;">
+                            <p style="color:#dc2626;margin:0;">❌ Error fetching recording: \` + error.message + \`</p>
+                            <p style="color:#6b7280;font-size:12px;margin:5px 0 0 0;">
+                                Please check the console for more details or try again later.
+                            </p>
+                        </div>
+                    \`;
+                }
             }
         </script>
         </div>
