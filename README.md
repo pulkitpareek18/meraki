@@ -8,14 +8,42 @@
 
 > **Meraki** is an advanced AI-powered mental health monitoring and support system that provides real-time voice-based counseling with comprehensive risk assessment. Built with empathy at its core, Meraki uses cutting-edge AI to understand, analyze, and support individuals in their mental health journey.
 
+## 🌟 **Why Meraki? Your Anytime Mental Health Friend**
+
+### 📞 **Call-Based AI Assistant - Just Like Your Best Friend**
+- **📱 Simple Phone Call**: No apps to download, no account setup needed
+- **🗣️ Natural Voice Conversations**: Speak naturally in Hindi/English, just like talking to a friend
+- **🤗 Always Available**: 24/7 mental health support, whenever you need someone to talk to
+- **❤️ Deeply Empathetic**: AI trained to truly listen and understand your emotions
+
+### 🚫 **No Barriers, Maximum Accessibility**
+- **🌐 No Internet Required**: Works on any basic phone - smartphone not needed
+- **📶 Cellular Network Only**: Just your regular phone connection is enough
+- **👥 Complete Privacy**: Anonymous conversations, no personal data collection
+- **💸 No Cost Barriers**: Accessible mental health support for everyone
+- **🏠 From Anywhere**: Rural areas, remote locations - geography doesn't matter
+
+### 🧠 **Professional-Grade Mental Health Support**
+- **🎯 Real-Time Risk Assessment**: AI identifies crisis situations immediately
+- **🔍 Clinical-Level Analysis**: Professional mental health evaluation in every call
+- **🚨 Emergency Detection**: Automatic alerts for immediate intervention needs
+- **📊 Continuous Monitoring**: Track mental health journey over time
+- **💊 Counseling Recommendations**: AI determines when professional help is needed
+
+### 🌍 **Built for India's Mental Health Needs**
+- **🇮🇳 Hindi-First Approach**: Primary conversations in Hindi with natural Hinglish support
+- **📱 Basic Phone Compatible**: Works with feature phones, not just smartphones
+- **🏘️ Rural-Friendly**: Designed for areas with limited internet connectivity
+- **👨‍👩‍👧‍👦 Family-Oriented**: Understanding Indian cultural context and family dynamics
+
 ## 🌟 **Key Features**
 
 ### **🎙️ Voice-First Mental Health Support**
 - **Real-time Voice Conversations**: Natural, empathetic voice interactions in Hindi/English
 - **AI Agent "Meraki"**: Deeply caring, professionally trained mental health support agent
 - **Dual Infrastructure**: 
-  - **Development**: Twilio gateway + Ultravox (Llama via API)
-  - **Production**: GSM Gateway hardware + Self-hosted Llama 4.5 355B
+  - **Development**: Twilio gateway + Ultravox (Z AI GLM via API)
+  - **Production**: GSM Gateway hardware + Self-hosted Z AI GLM 4.6 355B
 - **Multi-language Support**: Primarily Hindi with English and Hinglish capabilities
 
 ### **🤖 Advanced AI Analysis**
@@ -24,8 +52,8 @@
 - **Real-time Transcription**: Complete conversation transcripts with speaker identification
 - **Professional-grade Evaluation**: Clinical-level mental health risk scoring and recommendations
 - **Scalable AI Models**:
-  - **Development**: Llama models via Ultravox API service
-  - **Production**: Self-hosted Llama 4.5 355B (full control & privacy)
+  - **Development**: Z AI GLM models via Ultravox API service
+  - **Production**: Self-hosted Z AI GLM 4.6 355B (full control & privacy)
 
 ### 🎯 **Intelligent Risk Assessment**
 - **5-Level Risk Classification**: No → Low → Medium → High → Severe
@@ -55,7 +83,7 @@
                                                          │
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │  Ultravox API   │◀───│ Voice AI (Dev)   │◀───│  Call Handler   │
-│  (Llama via     │    │                  │    │                 │
+│ (Z AI GLM via   │    │                  │    │                 │
 │   Ultravox)     │    │                  │    │                 │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                                               │
@@ -79,7 +107,7 @@
                                                          │
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │ Self-Hosted     │◀───│ Voice AI (Prod)  │◀───│  Call Handler   │
-│ Llama 4.5 355B  │    │                  │    │                 │
+│Z AI GLM 4.6 355B│    │                  │    │                 │
 │                 │    │                  │    │                 │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                                               │
@@ -100,7 +128,7 @@
 - Node.js 18+ 
 - MongoDB database
 - Google AI API key (for Gemini)
-- Ultravox API key (uses Llama models via their service)
+- Ultravox API key (uses Z AI GLM models via their service)
 - Twilio account (for phone gateway)
 
 ### **🏭 Production Prerequisites** 
@@ -108,7 +136,7 @@
 - MongoDB database  
 - Google AI API key (for Gemini)
 - GSM Gateway Hardware (replaces Twilio)
-- Self-hosted Llama 4.5 355B model server (replaces Ultravox)
+- Self-hosted Z AI GLM 4.6 355B model server (replaces Ultravox)
 
 ### Installation
 
@@ -132,7 +160,7 @@ PORT=5000
 BASE_URL=https://your-domain.com
 NODE_ENV=development
 
-# Ultravox Voice AI (Development - uses Llama via Ultravox)
+# Ultravox Voice AI (Development - uses Z AI GLM via Ultravox)
 ULTRAVOX_API_KEY=your_ultravox_api_key
 ULTRAVOX_MODEL=fixie-ai/ultravox
 ULTRAVOX_VOICE_ID=9f6262e3-1b03-4a0b-9921-50b9cff66a43
@@ -159,10 +187,10 @@ PORT=5000
 BASE_URL=https://your-production-domain.com
 NODE_ENV=production
 
-# Self-hosted Llama 4.5 355B (Production)
-LLAMA_API_ENDPOINT=http://your-llama-server:8000
-LLAMA_MODEL=llama-4.5-355b
-LLAMA_TEMPERATURE=0.7
+# Self-hosted Z AI GLM 4.6 355B (Production)
+ZAI_API_ENDPOINT=http://your-zai-server:8000
+ZAI_MODEL=glm-4.6-355b
+ZAI_TEMPERATURE=0.7
 VOICE_SYNTHESIS_ENDPOINT=http://your-tts-server:8001
 
 # GSM Gateway Configuration (Production)
@@ -205,7 +233,7 @@ POST /incoming
 ```
 Handles incoming calls and routes them to AI agent:
 - **Development**: Twilio calls → Ultravox AI service
-- **Production**: GSM Gateway calls → Self-hosted Llama 4.5 355B
+- **Production**: GSM Gateway calls → Self-hosted Z AI GLM 4.6 355B
 
 #### **📊 Dashboard & Analytics**
 ```http
@@ -274,7 +302,7 @@ Handles AI service webhook events:
 
 **Production (Self-hosted):**
 - `call.initiated` - GSM call received
-- `ai.connected` - Llama model engaged
+- `ai.connected` - Z AI GLM model engaged
 - `call.completed` - Call ended (triggers analysis)
 
 ## 🧠 **AI Analysis System**
@@ -366,13 +394,13 @@ FIRST_SPEAKER=FIRST_SPEAKER_AGENT  // AI initiates conversation
 
 ### **🔧 Development Setup (Quick Testing)**
 - **Phone Gateway**: Twilio (cloud-based, easy setup)
-- **Voice AI**: Ultravox API (uses Llama models as a service)  
+- **Voice AI**: Ultravox API (uses Z AI GLM models as a service)  
 - **Benefits**: Fast setup, no hardware requirements, API-based
 - **Use Case**: Development, testing, prototyping
 
 ### **🏭 Production Setup (Enterprise Scale)**
 - **Phone Gateway**: GSM Gateway Hardware (on-premises)
-- **Voice AI**: Self-hosted Llama 4.5 355B (full model control)
+- **Voice AI**: Self-hosted Z AI GLM 4.6 355B (full model control)
 - **Benefits**: Complete privacy, no API costs, unlimited scale
 - **Use Case**: Production deployment, sensitive data, high volume
 
@@ -398,7 +426,7 @@ meraki/
 - **`riskAnalysis.js`**: Pure Gemini AI mental health assessment
 - **`conversation.js`**: Call lifecycle and data management
 - **`ultravox.js`**: Voice AI integration (dev) and recording management
-- **`llama.js`**: Self-hosted Llama 4.5 355B integration (production)
+- **`zai.js`**: Self-hosted Z AI GLM 4.6 355B integration (production)
 - **`dashboard.js`**: Real-time analytics and monitoring UI
 
 ### **Development Commands**
@@ -470,7 +498,7 @@ The system supports integration with:
 - **Dependencies**: Twilio account, Ultravox API access
 
 ### **🏭 Production Environment** 
-- **Compute**: 64+ GB RAM, 16+ CPU cores (for Llama 4.5 355B)
+- **Compute**: 64+ GB RAM, 16+ CPU cores (for Z AI GLM 4.6 355B)
 - **GPU**: NVIDIA A100/H100 or equivalent (recommended)
 - **Storage**: 500+ GB NVMe SSD for model and data
 - **Network**: GSM Gateway hardware, high-speed internet
@@ -482,7 +510,7 @@ Development (Twilio + Ultravox)
     ↓
 Testing & Validation
     ↓  
-Production Setup (GSM + Self-hosted Llama)
+Production Setup (GSM + Self-hosted Z AI GLM)
     ↓
 Enterprise Deployment
 ```
@@ -518,7 +546,7 @@ This project is private and proprietary. All rights reserved.
 ## 🙏 **Acknowledgments**
 
 - **Google Gemini AI** for advanced mental health analysis capabilities
-- **Meta Llama Team** for the powerful Llama 4.5 355B model
+- **Zhipu AI Team** for the powerful Z AI GLM 4.6 355B model
 - **Ultravox** for development-phase voice AI services
 - **Twilio** for development telecommunications infrastructure
 - **MongoDB** for scalable data storage solutions
