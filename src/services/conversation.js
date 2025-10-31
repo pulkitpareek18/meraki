@@ -53,24 +53,33 @@ export async function updateConversation(id, updates) {
  */
 export async function processCallCompletion(callId, isUltravoxCallId = false) {
     console.log(`📞 Processing call completion for ${callId}`);
+    console.log(`🔍 ID Type: ${isUltravoxCallId ? 'Ultravox CallId' : 'Twilio CallSid'}`);
     
     // If we received a Twilio CallSid, find the Ultravox call ID
     let ultravoxCallId = callId;
     let existing;
     
     if (!isUltravoxCallId) {
+        console.log(`🔍 Looking up conversation by Twilio CallSid: ${callId}`);
         existing = await findConversationByTwilioSid(callId);
         if (!existing) {
+            console.error(`❌ Could not find conversation record for Twilio CallSid: ${callId}`);
             throw new Error(`Could not find conversation record for Twilio CallSid: ${callId}`);
         }
         ultravoxCallId = existing.id;
+        console.log(`✅ Found conversation record - Ultravox ID: ${ultravoxCallId}`);
     } else {
+        console.log(`🔍 Looking up conversation by Ultravox CallId: ${callId}`);
         existing = await getConversationById(callId);
     }
     
     if (!existing) {
+        console.error(`❌ Conversation not found: ${callId}`);
         throw new Error(`Conversation not found: ${callId}`);
     }
+    
+    console.log(`✅ Found existing conversation record for ${ultravoxCallId}`);
+    console.log(`📊 Existing record status: ${existing.status}, From: ${existing.from}`);
 
     // NEW APPROACH: Audio analysis with fresh recording URL
     console.log(`🎵 Starting audio analysis with fresh recording URL for ${ultravoxCallId}...`);
@@ -79,21 +88,29 @@ export async function processCallCompletion(callId, isUltravoxCallId = false) {
     let transcript = '';
     
     try {
+        console.log(`🔄 Fetching call recording from Ultravox API...`);
         // Use audio analysis - it will fetch fresh recording URL from Ultravox API internally
         analysis = await analyzeAudioRecording(ultravoxCallId);
         transcript = analysis.transcript || '';
         console.log(`✅ Gemini audio analysis complete - transcript: ${transcript.length} chars`);
+        console.log(`📊 Analysis results: Risk Score: ${analysis.score || 'N/A'}, Needs Counselling: ${analysis.needsCounselling ? 'Yes' : 'No'}`);
+        console.log(`🚨 Immediate Intervention: ${analysis.immediateIntervention ? 'YES - HIGH RISK' : 'No'}`);
     } catch (audioError) {
         console.warn(`⚠️ Audio analysis failed, falling back to basic analysis:`, audioError.message);
+        console.log(`🔧 Attempting fallback analysis...`);
         // Fallback to basic analysis with empty transcript
         analysis = await classifyRiskAndCounselling('Recording analysis failed - manual review needed');
+        console.log(`✅ Fallback analysis complete`);
     }
     
     // Still get call details for metadata
+    console.log(`📋 Fetching call metadata from Ultravox...`);
     const callDetailsResult = await Promise.allSettled([getUltravoxCall(ultravoxCallId)]);
     const callDetails = callDetailsResult[0].status === 'fulfilled' ? callDetailsResult[0].value : null;
     if (callDetailsResult[0].status === 'rejected') {
-        console.warn(`Failed to fetch call details for ${callId}:`, callDetailsResult[0].reason.message);
+        console.warn(`⚠️ Failed to fetch call details for ${callId}:`, callDetailsResult[0].reason.message);
+    } else {
+        console.log(`✅ Call metadata retrieved successfully`);
     }
     
     // Update the conversation record with comprehensive analysis
@@ -129,9 +146,11 @@ export async function processCallCompletion(callId, isUltravoxCallId = false) {
         }
     };
     
+    console.log(`💾 Saving updated conversation record to database...`);
     await upsertConversation(updatedRecord);
     
     console.log(`✅ Call processing complete for ${callId}`);
+    console.log(`📊 Final Summary - Risk: ${updatedRecord.score || 'N/A'}, Status: ${updatedRecord.status}, Transcript Length: ${transcript.length}`);
     return updatedRecord;
 }
 

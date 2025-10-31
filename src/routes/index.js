@@ -27,6 +27,22 @@ const router = express.Router();
 router.post('/incoming', handleIncomingCall);
 router.post('/ultravox/events', handleUltravoxEvents);
 
+// Webhook testing endpoint
+router.post('/test/webhook', (req, res) => {
+    console.log('🧪 Test webhook received:');
+    console.log('📋 Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('📋 Body:', JSON.stringify(req.body, null, 2));
+    console.log('📋 Timestamp:', new Date().toISOString());
+    
+    res.json({ 
+        success: true, 
+        message: 'Webhook test successful',
+        received: req.body,
+        timestamp: new Date().toISOString(),
+        headers: req.headers
+    });
+});
+
 // API routes for conversations
 router.get('/api/conversations', getAllConversations);
 router.post('/api/conversations/:id/refresh', refreshSpecificConversation);
@@ -57,6 +73,40 @@ router.get('/health/detailed', async (req, res) => {
         res.status(500).json({
             ok: false,
             error: 'Health check failed',
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+// Webhook status endpoint
+router.get('/webhook/status', async (req, res) => {
+    try {
+        const conversations = await getConversations();
+        const recentWebhooks = conversations
+            .filter(c => c.updatedAt > new Date(Date.now() - 24 * 60 * 60 * 1000))
+            .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+            .slice(0, 10);
+
+        res.json({
+            ok: true,
+            webhookEndpoint: '/ultravox/events',
+            testEndpoint: '/test/webhook',
+            status: 'active',
+            recentActivity: {
+                last24Hours: recentWebhooks.length,
+                recentCalls: recentWebhooks.map(c => ({
+                    id: c.id,
+                    status: c.status,
+                    updatedAt: c.updatedAt,
+                    processingMethod: c.processingMethod
+                }))
+            },
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({
+            ok: false,
+            error: 'Failed to get webhook status',
             timestamp: new Date().toISOString()
         });
     }
