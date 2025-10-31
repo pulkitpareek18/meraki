@@ -38,8 +38,8 @@ async function startServer() {
     } catch (error) {
         console.error('❌ Database initialization failed:', error);
     }
-    
-    app.listen(SERVER_CONFIG.port, () => {
+
+    app.listen(SERVER_CONFIG.port, "0.0.0.0", () => {
         console.log(`✅ Server running successfully on port ${SERVER_CONFIG.port}`);
         console.log(`Dashboard available at: ${SERVER_CONFIG.baseUrl}/dashboard`);
         console.log(`Health check at: ${SERVER_CONFIG.baseUrl}/health`);
