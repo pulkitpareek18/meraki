@@ -176,7 +176,7 @@ export async function classifyRiskAndCounselling(transcriptOrUrl, callId = null)
     const text = transcriptOrUrl.trim();
     
     // Check cache first
-    const cacheKey = `gemini_text_analysis_${Buffer.from(text.substring(0, 200)).toString('base64')}`;
+    const cacheKey = `gemini_text_analysis_${Buffer.from(text).toString('base64')}`;
     const cachedResult = getCachedAnalysis(cacheKey);
     if (cachedResult) {
         console.log('📋 Using cached Gemini text analysis result');
@@ -290,17 +290,17 @@ function validateGeminiAudioResponse(response) {
     const validConfidenceLevels = ['low', 'medium', 'high'];
     
     return {
-        transcript: String(response.transcript || '').substring(0, 10000), // Limit transcript length
+        transcript: String(response.transcript || ''),
         risk_level: validRiskLevels.includes(response.risk_level) ? response.risk_level : 'no',
         counseling_needed: validCounselingLevels.includes(response.counseling_needed) ? response.counseling_needed : 'no',
         immediate_intervention: response.immediate_intervention === 'yes' ? 'yes' : 'no',
-        emotional_state: String(response.emotional_state || 'Unknown emotional state').substring(0, 300),
+        emotional_state: String(response.emotional_state || 'Unknown emotional state'),
         concerning_phrases: Array.isArray(response.concerning_phrases) ? 
-            response.concerning_phrases.slice(0, 10).map(p => String(p).substring(0, 200)) : [],
-        assessment_summary: String(response.assessment_summary || 'No assessment available').substring(0, 1000),
+            response.concerning_phrases.slice(0, 10).map(p => String(p)) : [],
+        assessment_summary: String(response.assessment_summary || 'No assessment available'),
         confidence_level: validConfidenceLevels.includes(response.confidence_level) ? response.confidence_level : 'medium',
         language_used: String(response.language_used || 'unknown').toLowerCase(),
-        support_recommendations: String(response.support_recommendations || 'Continue supportive listening').substring(0, 500)
+        support_recommendations: String(response.support_recommendations || 'Continue supportive listening')
     };
 }
 
@@ -484,7 +484,7 @@ Provide thorough analysis based on tone, speech patterns, content, emotional exp
                 const parsed = JSON.parse(responseText);
                 return validateGeminiAudioResponse(parsed);
             } catch (parseError) {
-                console.warn('🤖 Failed to parse Gemini audio response:', responseText.substring(0, 300));
+                console.warn('🤖 Failed to parse Gemini audio response:', responseText);
                 console.warn('Parse error:', parseError.message);
                 throw new Error(`Invalid JSON response from Gemini: ${parseError.message}`);
             }
@@ -525,7 +525,7 @@ Respond ONLY with valid JSON:
 
 ANALYZE FOR: Suicidal ideation, self-harm, depression, anxiety, emotional distress, coping mechanisms, support systems, crisis indicators, behavioral changes, hopelessness, mood patterns, cognitive distortions.
 
-Transcript: "${transcriptText.substring(0, 4000)}"`;
+Transcript: "${transcriptText}"`;
     
     // Create a promise that will timeout after 15 seconds
     const timeoutPromise = new Promise((_, reject) => {
@@ -544,7 +544,7 @@ Transcript: "${transcriptText.substring(0, 4000)}"`;
                 const parsed = JSON.parse(responseText);
                 return validateGeminiResponse(parsed);
             } catch (parseError) {
-                console.warn('🤖 Failed to parse Gemini response:', responseText.substring(0, 200));
+                console.warn('🤖 Failed to parse Gemini response:', responseText);
                 throw new Error(`Invalid JSON response from Gemini: ${parseError.message}`);
             }
         });
@@ -564,13 +564,13 @@ function validateGeminiResponse(response) {
         risk_level: validRiskLevels.includes(response.risk_level) ? response.risk_level : 'unknown',
         counseling_needed: validCounselingLevels.includes(response.counseling_needed) ? response.counseling_needed : 'no',
         immediate_intervention: response.immediate_intervention === 'yes' ? 'yes' : 'no',
-        emotional_state: String(response.emotional_state || 'Unknown emotional state').substring(0, 200),
+        emotional_state: String(response.emotional_state || 'Unknown emotional state'),
         concerning_phrases: Array.isArray(response.concerning_phrases) ? 
-            response.concerning_phrases.slice(0, 5).map(p => String(p).substring(0, 100)) : [],
-        assessment_summary: String(response.assessment_summary || 'No assessment available').substring(0, 500),
+            response.concerning_phrases.slice(0, 10).map(p => String(p)) : [],
+        assessment_summary: String(response.assessment_summary || 'No assessment available'),
         confidence_level: validConfidenceLevels.includes(response.confidence_level) ? response.confidence_level : 'medium',
         language_used: String(response.language_used || 'unknown').toLowerCase(),
-        support_recommendations: String(response.support_recommendations || 'Continue supportive listening').substring(0, 200)
+        support_recommendations: String(response.support_recommendations || 'Continue supportive listening')
     };
 }
 
