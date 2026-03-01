@@ -12,6 +12,10 @@
 - Core integrations: Twilio, Ultravox, Gemini, MongoDB
 - CI checks: dependency install + JavaScript syntax validation
 
+## Demo Card
+
+[![Meraki Demo Card](https://opengraph.githubassets.com/1/pulkitpareek18/meraki)](https://github.com/pulkitpareek18/meraki#meraki)
+
 Meraki is a voice-first mental health support backend that connects incoming Twilio calls to Ultravox, stores conversation records, and performs Gemini-based risk analysis for post-call monitoring.
 
 ## What It Does
