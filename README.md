@@ -1,5 +1,17 @@
 # Meraki
 
+[![CI](https://github.com/pulkitpareek18/meraki/actions/workflows/ci.yml/badge.svg)](https://github.com/pulkitpareek18/meraki/actions/workflows/ci.yml)
+![Last Commit](https://img.shields.io/github/last-commit/pulkitpareek18/meraki)
+![Stars](https://img.shields.io/github/stars/pulkitpareek18/meraki)
+![Stack](https://img.shields.io/badge/Stack-Node.js%20%7C%20Express%20%7C%20Gemini-blue)
+
+## Release Snapshot (March 2026)
+
+- Status: Active
+- Type: Voice-first mental health support backend
+- Core integrations: Twilio, Ultravox, Gemini, MongoDB
+- CI checks: dependency install + JavaScript syntax validation
+
 Meraki is a voice-first mental health support backend that connects incoming Twilio calls to Ultravox, stores conversation records, and performs Gemini-based risk analysis for post-call monitoring.
 
 ## What It Does
